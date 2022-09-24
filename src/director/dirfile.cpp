@@ -793,7 +793,7 @@ void DirectorFile::dumpScripts() {
 				scriptType = "UnknownScript";
 				id = std::to_string(it->first);
 			}
-			std::string fileName = cleanFileName("Cast " + cast->name + " " + scriptType + " " + id);
+			std::string fileName = cleanFileName(/*"Cast " + cast->name + " " + scriptType + " " + */id);
 			Common::writeFile(fileName + ".ls", it->second->scriptText());
 			Common::writeFile(fileName + ".lasm", it->second->bytecodeText());
 		}
