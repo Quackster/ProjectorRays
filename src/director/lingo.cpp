@@ -552,12 +552,16 @@ std::string ExitStmtNode::toString(bool, bool) {
 /* InverseOpNode */
 
 std::string InverseOpNode::toString(bool dot, bool sum) {
+	if (operand->type == kBinaryOpNode)
+		return "-(" + operand->toString(dot, sum) + ")";
 	return "-" + operand->toString(dot, sum);
 }
 
 /* NotOpNode */
 
 std::string NotOpNode::toString(bool dot, bool sum) {
+	if (operand->type == kBinaryOpNode)
+		return "not (" + operand->toString(dot, sum) + ")";
 	return "not " + operand->toString(dot, sum);
 }
 
@@ -565,8 +569,48 @@ std::string NotOpNode::toString(bool dot, bool sum) {
 
 std::string BinaryOpNode::toString(bool dot, bool sum) {
 	auto opString = Lingo::getName(Lingo::binaryOpNames, opcode);
-	// added "(" and ")" to fix op. precedence problems (not always needed, it can be improved)
-	return "(" + left->toString(dot, sum) + " " +  opString + " " + right->toString(dot, sum) + ")";
+	std::string leftString = left->toString(dot, sum);
+	std::string rightString = right->toString(dot, sum);
+	unsigned int precedence = getPrecedence();
+	if (precedence) {
+		if (left->type == kBinaryOpNode) {
+			auto leftBinaryOpNode = static_cast<BinaryOpNode *>(left.get());
+			if (leftBinaryOpNode->getPrecedence() > precedence)
+				leftString = "(" + leftString + ")";
+		}
+		if (right->type == kBinaryOpNode) {
+			auto rightBinaryOpNode = static_cast<BinaryOpNode *>(right.get());
+			if (rightBinaryOpNode->getPrecedence() >= precedence)
+				rightString = "(" + rightString + ")";
+		}
+	}
+	return leftString + " " +  opString + " " + rightString;
+}
+
+unsigned int BinaryOpNode::getPrecedence() {
+	switch (opcode) {
+	case kOpMul:
+	case kOpDiv:
+	case kOpMod:
+		return 1;
+	case kOpAdd:
+	case kOpSub:
+		return 2;
+	case kOpLt:
+	case kOpLtEq:
+	case kOpNtEq:
+	case kOpEq:
+	case kOpGt:
+	case kOpGtEq:
+		return 3;
+	case kOpAnd:
+		return 4;
+	case kOpOr:
+		return 5;
+	default:
+		break;
+	}
+	return 0;
 }
 
 /* ChunkExprNode */
@@ -612,6 +656,8 @@ std::string MemberExprNode::toString(bool dot, bool sum) {
 	if (!castID || (castID->type == kLiteralNode && castID->getValue()->type == kDatumInt && castID->getValue()->i == 0)) {
 		if (dot) {
 			res += "(" + memberID->toString(dot, sum) + ")";
+		} else if (memberID->type == kBinaryOpNode) {
+			res += " (" + memberID->toString(dot, sum) + ")";
 		} else {
 			res += " " + memberID->toString(dot, sum);
 		}
@@ -797,7 +843,12 @@ std::string CallNode::toString(bool dot, bool sum) {
 
 std::string ObjCallNode::toString(bool dot, bool sum) {
 	auto rawArgs = argList->getValue()->l;
-	std::string res = rawArgs[0]->toString(dot, sum) + "." + name + "(";
+	auto obj = rawArgs[0];
+	std::string leftOp = obj->toString(dot, sum);
+	if (obj->type != kVarNode && obj->type != kObjCallNode && obj->type != kObjCallV4Node && obj->type != kCallNode &&
+			obj->type != kObjPropExprNode && obj->type != kObjBracketExprNode && obj->type != kObjPropIndexExprNode)
+		leftOp = "(" + leftOp + ")";
+	std::string res = leftOp + "." + name + "(";
 	for (size_t i = 1; i < rawArgs.size(); i++) {
 		if (i > 1)
 			res += ", ";
@@ -873,9 +924,13 @@ std::string ThePropExprNode::toString(bool, bool sum) {
 /* ObjPropExprNode */
 
 std::string ObjPropExprNode::toString(bool dot, bool sum) {
-	if (dot)
-		return obj->toString(dot, sum) + "." + prop;
-
+	if (dot) {
+		std::string leftOp = obj->toString(dot, sum);
+		if (obj->type != kVarNode && obj->type != kObjCallNode && obj->type != kObjCallV4Node && obj->type != kCallNode &&
+				obj->type != kObjPropExprNode && obj->type != kObjBracketExprNode && obj->type != kObjPropIndexExprNode)
+			leftOp = "(" + leftOp + ")";
+		return leftOp + "." + prop;
+	}
 	return "the " + prop + " of " + obj->toString(dot, sum);
 }
 
@@ -888,7 +943,11 @@ std::string ObjBracketExprNode::toString(bool dot, bool sum) {
 /* ObjPropIndexExprNode */
 
 std::string ObjPropIndexExprNode::toString(bool dot, bool sum) {
-	std::string res = obj->toString(dot, sum) + "." + prop + "[" + index->toString(dot, sum);
+	std::string leftOp = obj->toString(dot, sum);
+	if (obj->type != kVarNode && obj->type != kObjCallNode && obj->type != kObjCallV4Node && obj->type != kCallNode &&
+			obj->type != kObjPropExprNode && obj->type != kObjBracketExprNode && obj->type != kObjPropIndexExprNode)
+		leftOp = "(" + leftOp + ")";
+	std::string res = leftOp + "." + prop + "[" + index->toString(dot, sum);
 	if (index2)
 		res += ".." + index2->toString(dot, sum);
 	res += "]";

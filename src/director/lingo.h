@@ -526,6 +526,7 @@ struct BinaryOpNode : ExprNode {
 	}
 	virtual ~BinaryOpNode() = default;
 	virtual std::string toString(bool dot, bool sum);
+	virtual unsigned int getPrecedence();
 };
 
 /* ChunkExprNode */
@@ -1013,7 +1014,7 @@ struct ObjPropIndexExprNode : ExprNode {
 		obj->parent = this;
 		index = std::move(i);
 		index->parent = this;
-		if (index2) {
+		if (i2) {
 			index2 = std::move(i2);
 			index2->parent = this;
 		}
