@@ -94,14 +94,8 @@ function init() {
     if (paletteTypeSelect) {
         paletteTypeSelect.addEventListener('change', () => {
             if (selectedAsset && selectedAsset.member && selectedAsset.member.type === MemberType.kBitmapMember) {
-                // Clear existing info except palette selector
-                assetInfo.innerHTML = '';
-                assetCanvas.classList.add('hidden');
-                assetText.classList.add('hidden');
-                assetBinary.classList.add('hidden');
-                // Re-display the bitmap with new palette
-                displayAssetInfo(selectedAsset);
-                displayBitmap(selectedAsset);
+                // Re-display the asset with new palette
+                refreshAssetDisplay();
             }
         });
     }
