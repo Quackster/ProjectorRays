@@ -745,88 +745,154 @@ function getPaletteName(paletteId) {
     }
 }
 
-// Try to parse BITD data using PhotoRenderer format (with header at offset 28)
-// Returns { width, height, bitDepth, totalWidth, paletteId, pixelDataOffset } or null if not in this format
-function tryParsePhotoRendererFormat(bitdBytes) {
-    if (bitdBytes.length < 70) return null; // Need at least header + some pixel data
+/**
+ * BITD Decoder - Following ScummVM's Director engine implementation
+ * Handles decompression and pixel extraction for Director bitmap data
+ */
 
-    const view = new DataView(bitdBytes.buffer, bitdBytes.byteOffset, bitdBytes.byteLength);
-
-    // PhotoRenderer format: header starts at offset 28
-    const HEADER_OFFSET = 28;
-
-    try {
-        // Read bitmap properties at offset 28
-        const totalWidth = view.getUint16(HEADER_OFFSET, false) & 0x7FFF;
-        const top = view.getInt16(HEADER_OFFSET + 2, false);
-        const left = view.getInt16(HEADER_OFFSET + 4, false);
-        const bottom = view.getInt16(HEADER_OFFSET + 6, false);
-        const right = view.getInt16(HEADER_OFFSET + 8, false);
-
-        const width = right - left;
-        const height = bottom - top;
-
-        // Sanity check dimensions
-        if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
-            return null;
-        }
-        if (totalWidth <= 0 || totalWidth > 4096) {
-            return null;
-        }
-
-        // After rect (10 bytes), skip 13 bytes, then read bitDepth (1 byte, at offset 28+10+13=51)
-        // Actually per PhotoRenderer: skip 1, skip 7, readShort, readShort, read = 1+7+2+2+1 = 13 bytes
-        const bitDepthOffset = HEADER_OFFSET + 10 + 13; // offset 51
-        if (bitdBytes.length < bitDepthOffset + 1) return null;
-
-        const bitDepth = bitdBytes[bitDepthOffset]; // Little-endian single byte
-
-        // Validate bit depth
-        if (bitDepth !== 1 && bitDepth !== 8 && bitDepth !== 16 && bitDepth !== 24 && bitDepth !== 32) {
-            return null;
-        }
-
-        // Palette is at offset 52 (4 bytes big-endian int, subtract 1)
-        const paletteOffset = bitDepthOffset + 1;
-        if (bitdBytes.length < paletteOffset + 4) return null;
-        const paletteId = view.getInt32(paletteOffset, false) - 1;
-
-        // Skip 8 more bytes (4 + skip 4), then length at offset 64 (4 bytes little-endian)
-        const lengthOffset = paletteOffset + 4 + 8; // offset 64
-        if (bitdBytes.length < lengthOffset + 4) return null;
-
-        // Read length as little-endian
-        const length = view.getUint32(lengthOffset, true);
-
-        // Pixel data starts at offset 68
-        const pixelDataOffset = lengthOffset + 4; // offset 68
-
-        console.log('PhotoRenderer format detected:', {
-            totalWidth, width, height, bitDepth, paletteId, length, pixelDataOffset
-        });
-
-        return {
-            width,
-            height,
-            bitDepth,
-            totalWidth,
-            paletteId,
-            pixelDataOffset
-        };
-    } catch (e) {
-        console.log('Not PhotoRenderer format:', e.message);
+// Parse bitmap member specific data following ScummVM's BitmapCastMember
+function parseBitmapMemberData(specificData, version) {
+    if (!specificData || specificData.length < 10) {
         return null;
     }
+
+    const bytes = toUint8Array(specificData);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    // Common header for all versions:
+    // Offset 0-1: flags/pitch (high bit indicates extended data)
+    // Offset 2-9: initialRect (top, left, bottom, right)
+    const flags = view.getUint16(0, false);
+    const top = view.getInt16(2, false);
+    const left = view.getInt16(4, false);
+    const bottom = view.getInt16(6, false);
+    const right = view.getInt16(8, false);
+
+    const width = right - left;
+    const height = bottom - top;
+
+    if (width <= 0 || height <= 0) {
+        return null;
+    }
+
+    let pitch = 0;
+    let bitsPerPixel = 1;
+    let paletteId = PaletteType.kClutSystemMac;
+
+    if (version < 400) {
+        // Pre-D4: Calculate pitch from width, pad to 16-byte boundary
+        // ScummVM: pitch = width; if (pitch % 16) pitch += 16 - (width % 16); pitch *= bpp; pitch >>= 3;
+        pitch = width;
+        if (pitch % 16 !== 0) {
+            pitch += 16 - (width % 16);
+        }
+
+        // For pre-D4, check if we have extended data
+        if ((flags & 0x8000) !== 0 && bytes.length >= 24) {
+            bitsPerPixel = view.getUint16(20, false);
+            const clutId = view.getInt16(22, false);
+            paletteId = clutId <= 0 ? clutId - 1 : clutId;
+        }
+
+        pitch = (pitch * bitsPerPixel) >> 3;
+    } else {
+        // D4+: pitch is stored in the data (masked)
+        pitch = flags & 0x7FFF;
+
+        // Read bounding rect (offset 10-17), regPoint (18-21)
+        // Then flags1 at 22, bitsPerPixel at 23
+        if (bytes.length >= 24) {
+            bitsPerPixel = view.getUint8(23);
+            if (bitsPerPixel === 0) bitsPerPixel = 1;
+        }
+
+        // Palette ID location depends on version
+        if (version >= 500 && bytes.length >= 28) {
+            // D5+: clutCastLib at 24-25, clutId at 26-27
+            paletteId = view.getInt16(26, false);
+            if (paletteId <= 0) paletteId = paletteId - 1;
+        } else if (bytes.length >= 26) {
+            // D4: clutId at 24-25
+            paletteId = view.getInt16(24, false);
+            if (paletteId <= 0) paletteId = paletteId - 1;
+        }
+    }
+
+    // If pitch is still 0, calculate it
+    if (pitch === 0) {
+        pitch = Math.ceil((width * bitsPerPixel) / 8);
+        // Align to word boundary
+        if (pitch % 2 !== 0) pitch++;
+    }
+
+    console.log('parseBitmapMemberData:', { width, height, bitsPerPixel, pitch, paletteId, version });
+
+    return {
+        width,
+        height,
+        bitsPerPixel,
+        pitch,
+        paletteId,
+        top,
+        left
+    };
+}
+
+// ScummVM-style RLE decompression for BITD chunks
+// Returns decompressed data, or null if data appears uncompressed
+function decompressBITD(stream, expectedBytes, version, bitsPerPixel) {
+    const streamSize = stream.length;
+
+    // Check if data is uncompressed
+    // ScummVM: For 32-bit before D4, data is always raw
+    if (version < 400 && bitsPerPixel === 32) {
+        return stream;
+    }
+
+    // If stream is at least as large as expected, assume uncompressed
+    if (streamSize >= expectedBytes) {
+        return stream;
+    }
+
+    // RLE decompression following ScummVM
+    const output = new Uint8Array(expectedBytes);
+    let srcPos = 0;
+    let dstPos = 0;
+
+    while (srcPos < streamSize && dstPos < expectedBytes) {
+        const code = stream[srcPos++];
+
+        if ((code & 0x80) === 0) {
+            // Literal run: copy (code + 1) bytes
+            const count = code + 1;
+            for (let i = 0; i < count && srcPos < streamSize && dstPos < expectedBytes; i++) {
+                output[dstPos++] = stream[srcPos++];
+            }
+        } else {
+            // Repeat run: repeat next byte ((code ^ 0xFF) + 2) times
+            const count = (code ^ 0xFF) + 2;
+            const value = srcPos < streamSize ? stream[srcPos++] : 0;
+            for (let i = 0; i < count && dstPos < expectedBytes; i++) {
+                output[dstPos++] = value;
+            }
+        }
+    }
+
+    // Pad with zeros if we didn't get enough data
+    while (dstPos < expectedBytes) {
+        output[dstPos++] = 0;
+    }
+
+    return output;
 }
 
 function displayBitmap(asset) {
     const member = asset.member;
+    const version = currentDirFile?.version || 500;
 
-    console.log('displayBitmap called for:', asset.name, 'id:', asset.id);
-    console.log('  dataChunkId:', asset.dataChunkId);
-    console.log('  member.specificData length:', member.specificData?.length);
+    console.log('displayBitmap called for:', asset.name, 'id:', asset.id, 'version:', version);
 
-    // Try to get the BITD chunk data first
+    // Try to get the BITD chunk data
     let bitdData = null;
     if (asset.dataChunkId && currentDirFile.chunkExists(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId)) {
         try {
@@ -837,190 +903,66 @@ function displayBitmap(asset) {
         }
     }
 
-    // Try PhotoRenderer format first (BITD contains header + pixel data)
-    if (bitdData) {
-        const bitdBytes = toUint8Array(bitdData);
-        const photoFormat = tryParsePhotoRendererFormat(bitdBytes);
-
-        if (photoFormat) {
-            // Use PhotoRenderer format
-            const { width, height, bitDepth, totalWidth, paletteId, pixelDataOffset } = photoFormat;
-
-            // Get palette using ScummVM-style lookup
-            // PhotoRenderer palette ID is stored directly (not adjusted)
-            const adjustedPaletteId = paletteId <= 0 ? paletteId - 1 : paletteId;
-            const paletteInfo = paletteId < 0 ?
-                { palette: getBuiltInPalette(adjustedPaletteId), name: getPaletteName(adjustedPaletteId), id: adjustedPaletteId } :
-                getPaletteForBitmap(member);
-
-            assetInfo.innerHTML += `
-                <p><strong>Format:</strong> PhotoRenderer/Habbo</p>
-                <p><strong>Dimensions:</strong> ${width} x ${height}</p>
-                <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
-                <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
-                <p><strong>Palette:</strong> ${paletteInfo.name} (ID: ${paletteInfo.id})</p>
-            `;
-
-            // Extract pixel data starting at pixelDataOffset
-            const pixelData = bitdBytes.slice(pixelDataOffset);
-            renderBitmapToCanvas(pixelData, width, height, bitDepth, totalWidth, paletteInfo.palette, true); // Use PhotoRenderer RLE
-            return;
-        }
-    }
-
-    // Fall back to standard Director format (dimensions from specificData, BITD is just pixel data)
-    if (!member.specificData || member.specificData.length < 14) {
-        assetBinary.innerHTML = '<p>No bitmap data available</p>';
+    // Parse bitmap member data
+    const bitmapInfo = parseBitmapMemberData(member.specificData, version);
+    if (!bitmapInfo) {
+        assetBinary.innerHTML = '<p>No bitmap data available or invalid format</p>';
         assetBinary.classList.remove('hidden');
         return;
     }
 
-    const data = member.specificData;
-    const bytes = toUint8Array(data);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const { width, height, bitsPerPixel, pitch, paletteId } = bitmapInfo;
+
+    // Get the appropriate palette
+    let paletteInfo;
+    if (paletteId < 0) {
+        paletteInfo = {
+            palette: getBuiltInPalette(paletteId),
+            name: getPaletteName(paletteId),
+            id: paletteId
+        };
+    } else if (paletteId > 0) {
+        // Try to load custom palette from CLUT
+        paletteInfo = getPaletteForBitmap(member);
+    } else {
+        paletteInfo = {
+            palette: getBuiltInPalette(PaletteType.kClutSystemMac),
+            name: 'System - Mac',
+            id: PaletteType.kClutSystemMac
+        };
+    }
+
+    // Update info display
+    assetInfo.innerHTML += `
+        <p><strong>Dimensions:</strong> ${width} x ${height}</p>
+        <p><strong>Bit Depth:</strong> ${bitsPerPixel}-bit</p>
+        <p><strong>Pitch:</strong> ${pitch} bytes/row</p>
+        <p><strong>Palette:</strong> ${paletteInfo.name} (ID: ${paletteInfo.id})</p>
+    `;
+
+    if (!bitdData) {
+        console.log('  No BITD chunk found');
+        assetInfo.innerHTML += `<p><strong>Note:</strong> Bitmap data chunk not found</p>`;
+        displayBinaryData(asset);
+        return;
+    }
 
     try {
-        // Parse bitmap member specific data
-        // Format varies by version but generally:
-        // Offset 0: totalWidth (row stride in bytes, includes padding)
-        // Offset 2-9: initialRect (top, left, bottom, right)
-        // Offset 10-17: boundingRect
-        // Offset 18-21: regPoint (y, x)
-        // Offset 22: flags or bitDepth
-
-        let totalWidth = view.getUint16(0, false) & 0x7FFF;  // Row stride (mask high bit)
-        const top = view.getInt16(2, false);
-        const left = view.getInt16(4, false);
-        const bottom = view.getInt16(6, false);
-        const right = view.getInt16(8, false);
-        const width = right - left;
-        const height = bottom - top;
-
-        let bitDepth = 8; // Default
-
-        if (bytes.length >= 24) {
-            // Try to get bit depth - location varies by version
-            // For D4+, it's often at offset 22 as a byte
-            const possibleBitDepth = view.getUint8(22);
-            if (possibleBitDepth === 1 || possibleBitDepth === 2 || possibleBitDepth === 4 ||
-                possibleBitDepth === 8 || possibleBitDepth === 16 || possibleBitDepth === 24 || possibleBitDepth === 32) {
-                bitDepth = possibleBitDepth;
-            }
-        }
-
-        // For D5+, bit depth might be at offset 22 as uint16
-        if (currentDirFile.version >= 500 && bytes.length >= 24) {
-            const altBitDepth = view.getUint16(22, false);
-            if (altBitDepth === 1 || altBitDepth === 8 || altBitDepth === 16 || altBitDepth === 24 || altBitDepth === 32) {
-                bitDepth = altBitDepth;
-            }
-        }
-
-        // Calculate expected row width if not provided
-        if (totalWidth === 0) {
-            totalWidth = Math.ceil((width * bitDepth) / 8);
-            // Align to 2 bytes (word alignment)
-            if (totalWidth % 2 !== 0) totalWidth++;
-        }
-
-        // Get the appropriate palette using ScummVM-style lookup
-        const paletteInfo = getPaletteForBitmap(member);
-
-        // Update info with dimensions
-        assetInfo.innerHTML += `
-            <p><strong>Format:</strong> Standard Director</p>
-            <p><strong>Dimensions:</strong> ${width} x ${height}</p>
-            <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
-            <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
-            <p><strong>Palette:</strong> ${paletteInfo.name} (ID: ${paletteInfo.id})</p>
-        `;
-
-        if (bitdData) {
-            renderBitmapToCanvas(bitdData, width, height, bitDepth, totalWidth, paletteInfo.palette, false); // Use standard PackBits
-        } else {
-            console.log('  No BITD chunk found, showing binary data');
-            assetInfo.innerHTML += `<p><strong>Note:</strong> Bitmap data chunk not found</p>`;
-            displayBinaryData(asset);
-        }
+        const bitdBytes = toUint8Array(bitdData);
+        decodeBITD(bitdBytes, width, height, bitsPerPixel, pitch, paletteInfo.palette, version);
     } catch (e) {
-        console.error('Error parsing bitmap:', e);
+        console.error('Error decoding bitmap:', e);
+        assetInfo.innerHTML += `<p><strong>Error:</strong> ${e.message}</p>`;
         displayBinaryData(asset);
     }
 }
 
-// Decompress RLE encoded data (used in Director BITD chunks)
-// This matches PhotoRenderer's algorithm: marker >= 128 means repeat, < 128 means literal
-function decompressRLE(compressed, expectedSize) {
-    const output = new Uint8Array(expectedSize);
-    let srcPos = 0;
-    let dstPos = 0;
-
-    while (srcPos < compressed.length && dstPos < expectedSize) {
-        const marker = compressed[srcPos++];
-
-        if (marker >= 128) {
-            // Repeat next byte (257 - marker) times
-            // For marker=128: repeat 129 times
-            // For marker=255: repeat 2 times
-            const count = 257 - marker;
-            const value = srcPos < compressed.length ? compressed[srcPos++] : 0;
-            for (let i = 0; i < count && dstPos < expectedSize; i++) {
-                output[dstPos++] = value;
-            }
-        } else {
-            // Copy (marker + 1) bytes literally
-            // For marker=0: copy 1 byte
-            // For marker=127: copy 128 bytes
-            const count = marker + 1;
-            for (let i = 0; i < count && dstPos < expectedSize && srcPos < compressed.length; i++) {
-                output[dstPos++] = compressed[srcPos++];
-            }
-        }
-    }
-
-    return output;
-}
-
-// Standard PackBits decompression (128 is no-op) - for standard Director files
-function decompressPackBits(compressed, expectedSize) {
-    const output = new Uint8Array(expectedSize);
-    let srcPos = 0;
-    let dstPos = 0;
-
-    while (srcPos < compressed.length && dstPos < expectedSize) {
-        const n = compressed[srcPos++];
-
-        if (n < 128) {
-            // Copy n+1 bytes literally
-            const count = n + 1;
-            for (let i = 0; i < count && dstPos < expectedSize && srcPos < compressed.length; i++) {
-                output[dstPos++] = compressed[srcPos++];
-            }
-        } else if (n > 128) {
-            // Repeat next byte (257-n) times
-            const count = 257 - n;
-            const value = srcPos < compressed.length ? compressed[srcPos++] : 0;
-            for (let i = 0; i < count && dstPos < expectedSize; i++) {
-                output[dstPos++] = value;
-            }
-        }
-        // n === 128 is a no-op in standard PackBits
-    }
-
-    return output;
-}
-
-function renderBitmapToCanvas(data, width, height, bitDepth, rowStride, palette = null, usePhotoRendererRLE = false) {
-    console.log('renderBitmapToCanvas:', { width, height, bitDepth, rowStride, dataSize: data?.length || data?.byteLength, usePhotoRendererRLE });
-
-    // Use provided palette or fall back to System Mac palette
-    palette = palette || getBuiltInPalette(PaletteType.kClutSystemMac);
+// Main BITD decoder following ScummVM's BITDDecoder::loadStream
+function decodeBITD(stream, width, height, bitsPerPixel, pitch, palette, version) {
+    console.log('decodeBITD:', { width, height, bitsPerPixel, pitch, streamSize: stream.length, version });
 
     if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
-        console.log('  Invalid dimensions, showing error');
-        assetBinary.innerHTML = '<p>Invalid bitmap dimensions</p>';
-        assetBinary.classList.remove('hidden');
-        return;
+        throw new Error('Invalid bitmap dimensions');
     }
 
     const canvas = assetCanvas;
@@ -1031,126 +973,180 @@ function renderBitmapToCanvas(data, width, height, bitDepth, rowStride, palette 
     const imageData = ctx.createImageData(width, height);
     const pixels = imageData.data;
 
-    const compressed = toUint8Array(data);
+    // Use default palette if not provided
+    palette = palette || getBuiltInPalette(PaletteType.kClutSystemMac);
 
-    // Calculate expected decompressed size
-    const expectedSize = rowStride * height;
-
-    // Try to decompress
-    let bytes;
-    if (compressed.length < expectedSize) {
-        // Data is compressed - decompress it
-        try {
-            if (usePhotoRendererRLE) {
-                // Use PhotoRenderer's RLE algorithm (marker >= 128 means repeat)
-                bytes = decompressRLE(compressed, expectedSize);
-                assetInfo.innerHTML += `<p><strong>Compression:</strong> RLE (${compressed.length} -> ${bytes.length} bytes)</p>`;
-            } else {
-                // Use standard PackBits (128 is no-op)
-                bytes = decompressPackBits(compressed, expectedSize);
-                assetInfo.innerHTML += `<p><strong>Compression:</strong> PackBits (${compressed.length} -> ${bytes.length} bytes)</p>`;
-            }
-        } catch (e) {
-            console.error('Decompression error:', e);
-            // Fall back to raw data
-            bytes = compressed;
-        }
+    // Calculate bytes per pixel for pitch calculation
+    let bytesPerPixel;
+    if (bitsPerPixel <= 8) {
+        bytesPerPixel = 1;
+    } else if (bitsPerPixel === 16) {
+        bytesPerPixel = 2;
     } else {
-        bytes = compressed;
-        if (compressed.length > expectedSize) {
-            console.log('  Data larger than expected, using first', expectedSize, 'bytes');
-        }
+        bytesPerPixel = 4;
     }
 
-    try {
+    // Expected uncompressed size
+    const expectedBytes = pitch * height;
 
-        if (bitDepth === 1) {
-            // 1-bit bitmap (black and white)
-            for (let y = 0; y < height; y++) {
-                const rowStart = y * rowStride;
-                for (let x = 0; x < width; x++) {
-                    const byteIndex = rowStart + Math.floor(x / 8);
-                    const bitIndex = 7 - (x % 8);
-                    const bit = (bytes[byteIndex] >> bitIndex) & 1;
-                    const color = bit ? 0 : 255;  // 1 = black, 0 = white in Director
-                    const dstOffset = (y * width + x) * 4;
-                    pixels[dstOffset] = color;
-                    pixels[dstOffset + 1] = color;
-                    pixels[dstOffset + 2] = color;
-                    pixels[dstOffset + 3] = 255;
-                }
+    // Decompress if needed
+    const isCompressed = stream.length < expectedBytes;
+    let data;
+
+    if (isCompressed) {
+        data = decompressBITD(stream, expectedBytes, version, bitsPerPixel);
+        assetInfo.innerHTML += `<p><strong>Compression:</strong> RLE (${stream.length} -> ${data.length} bytes)</p>`;
+    } else {
+        data = stream;
+        assetInfo.innerHTML += `<p><strong>Compression:</strong> None</p>`;
+    }
+
+    // Pixel extraction based on bit depth
+    // Following ScummVM's BITDDecoder::loadStream
+
+    if (bitsPerPixel === 1) {
+        // 1-bit: 8 pixels per byte
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const byteIdx = y * pitch + Math.floor(x / 8);
+                const bitIdx = 7 - (x % 8);
+                const bit = (data[byteIdx] >> bitIdx) & 1;
+                // ScummVM: bit ? 0x00 : 0xff (1 = black, 0 = white)
+                const color = bit ? 0 : 255;
+                const dstOffset = (y * width + x) * 4;
+                pixels[dstOffset] = color;
+                pixels[dstOffset + 1] = color;
+                pixels[dstOffset + 2] = color;
+                pixels[dstOffset + 3] = 255;
             }
-        } else if (bitDepth === 8) {
-            // 8-bit indexed color
+        }
+    } else if (bitsPerPixel === 2) {
+        // 2-bit: 4 pixels per byte
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const byteIdx = y * pitch + Math.floor(x / 4);
+                const shift = 2 * (3 - (x % 4));
+                const colorIdx = (data[byteIdx] >> shift) & 0x03;
+                // 2-bit grayscale: 0=white, 3=black
+                const gray = 255 - (colorIdx * 85);
+                const dstOffset = (y * width + x) * 4;
+                pixels[dstOffset] = gray;
+                pixels[dstOffset + 1] = gray;
+                pixels[dstOffset + 2] = gray;
+                pixels[dstOffset + 3] = 255;
+            }
+        }
+    } else if (bitsPerPixel === 4) {
+        // 4-bit: 2 pixels per byte
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const byteIdx = y * pitch + Math.floor(x / 2);
+                const shift = 4 * (1 - (x % 2));
+                const colorIdx = (data[byteIdx] >> shift) & 0x0F;
+                const [r, g, b] = palette[colorIdx] || [colorIdx * 17, colorIdx * 17, colorIdx * 17];
+                const dstOffset = (y * width + x) * 4;
+                pixels[dstOffset] = r;
+                pixels[dstOffset + 1] = g;
+                pixels[dstOffset + 2] = b;
+                pixels[dstOffset + 3] = 255;
+            }
+        }
+    } else if (bitsPerPixel === 8) {
+        // 8-bit: 1 pixel per byte, indexed color
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const byteIdx = y * pitch + x;
+                const colorIdx = data[byteIdx] || 0;
+                const [r, g, b] = palette[colorIdx] || [colorIdx, colorIdx, colorIdx];
+                const dstOffset = (y * width + x) * 4;
+                pixels[dstOffset] = r;
+                pixels[dstOffset + 1] = g;
+                pixels[dstOffset + 2] = b;
+                pixels[dstOffset + 3] = 255;
+            }
+        }
+    } else if (bitsPerPixel === 16) {
+        // 16-bit RGB555
+        // ScummVM: For compressed data, bytes are interleaved across width
+        if (isCompressed) {
+            // Compressed 16-bit: high bytes first, then low bytes
             for (let y = 0; y < height; y++) {
-                const rowStart = y * rowStride;
+                const rowStart = y * pitch;
                 for (let x = 0; x < width; x++) {
-                    const colorIndex = bytes[rowStart + x] || 0;
-                    const [r, g, b] = palette[colorIndex] || [colorIndex, colorIndex, colorIndex];
+                    const hi = data[rowStart + x];
+                    const lo = data[rowStart + width + x];
+                    const pixel = (hi << 8) | lo;
+                    // RGB555: xRRRRRGGGGGBBBBB
+                    const r = Math.round(((pixel >> 10) & 0x1F) * 255 / 31);
+                    const g = Math.round(((pixel >> 5) & 0x1F) * 255 / 31);
+                    const b = Math.round((pixel & 0x1F) * 255 / 31);
                     const dstOffset = (y * width + x) * 4;
                     pixels[dstOffset] = r;
                     pixels[dstOffset + 1] = g;
                     pixels[dstOffset + 2] = b;
                     pixels[dstOffset + 3] = 255;
-                }
-            }
-        } else if (bitDepth === 16) {
-            // 16-bit RGB (RGB555 big-endian)
-            for (let y = 0; y < height; y++) {
-                const rowStart = y * rowStride;
-                for (let x = 0; x < width; x++) {
-                    const offset = rowStart + x * 2;
-                    const pixel = (bytes[offset] << 8) | bytes[offset + 1];
-                    // RGB555: XRRRRRGGGGGBBBBB
-                    const r = ((pixel >> 10) & 0x1F) * 255 / 31;
-                    const g = ((pixel >> 5) & 0x1F) * 255 / 31;
-                    const b = (pixel & 0x1F) * 255 / 31;
-                    const dstOffset = (y * width + x) * 4;
-                    pixels[dstOffset] = r;
-                    pixels[dstOffset + 1] = g;
-                    pixels[dstOffset + 2] = b;
-                    pixels[dstOffset + 3] = 255;
-                }
-            }
-        } else if (bitDepth === 24) {
-            // 24-bit RGB
-            for (let y = 0; y < height; y++) {
-                const rowStart = y * rowStride;
-                for (let x = 0; x < width; x++) {
-                    const offset = rowStart + x * 3;
-                    const dstOffset = (y * width + x) * 4;
-                    // Director uses BGR or RGB depending on platform
-                    pixels[dstOffset] = bytes[offset] || 0;
-                    pixels[dstOffset + 1] = bytes[offset + 1] || 0;
-                    pixels[dstOffset + 2] = bytes[offset + 2] || 0;
-                    pixels[dstOffset + 3] = 255;
-                }
-            }
-        } else if (bitDepth === 32) {
-            // 32-bit ARGB or RGBA
-            for (let y = 0; y < height; y++) {
-                const rowStart = y * rowStride;
-                for (let x = 0; x < width; x++) {
-                    const offset = rowStart + x * 4;
-                    const dstOffset = (y * width + x) * 4;
-                    // Director 32-bit is typically ARGB
-                    pixels[dstOffset] = bytes[offset + 1] || 0;      // R
-                    pixels[dstOffset + 1] = bytes[offset + 2] || 0;  // G
-                    pixels[dstOffset + 2] = bytes[offset + 3] || 0;  // B
-                    pixels[dstOffset + 3] = bytes[offset] || 255;    // A
                 }
             }
         } else {
-            throw new Error(`Unsupported bit depth: ${bitDepth}`);
+            // Uncompressed 16-bit: sequential bytes
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const offset = y * pitch + x * 2;
+                    const pixel = (data[offset] << 8) | data[offset + 1];
+                    const r = Math.round(((pixel >> 10) & 0x1F) * 255 / 31);
+                    const g = Math.round(((pixel >> 5) & 0x1F) * 255 / 31);
+                    const b = Math.round((pixel & 0x1F) * 255 / 31);
+                    const dstOffset = (y * width + x) * 4;
+                    pixels[dstOffset] = r;
+                    pixels[dstOffset + 1] = g;
+                    pixels[dstOffset + 2] = b;
+                    pixels[dstOffset + 3] = 255;
+                }
+            }
         }
-
-        ctx.putImageData(imageData, 0, 0);
-        canvas.classList.remove('hidden');
-    } catch (e) {
-        console.error('Error rendering bitmap:', e);
-        assetInfo.innerHTML += `<p><strong>Error:</strong> ${e.message}</p>`;
-        displayHexDump(bytes, 256);
+    } else if (bitsPerPixel === 32) {
+        // 32-bit ARGB
+        // ScummVM: For compressed D4+ data, channels are separated across rows
+        if (isCompressed && version >= 400) {
+            // Compressed 32-bit in D4+: A, R, G, B are in separate row sections
+            for (let y = 0; y < height; y++) {
+                const rowStart = y * pitch;
+                for (let x = 0; x < width; x++) {
+                    // Channels are interleaved: A row, R row, G row, B row
+                    const a = data[rowStart + x];
+                    const r = data[rowStart + width + x];
+                    const g = data[rowStart + width * 2 + x];
+                    const b = data[rowStart + width * 3 + x];
+                    const dstOffset = (y * width + x) * 4;
+                    pixels[dstOffset] = r;
+                    pixels[dstOffset + 1] = g;
+                    pixels[dstOffset + 2] = b;
+                    pixels[dstOffset + 3] = a;
+                }
+            }
+        } else {
+            // Uncompressed or pre-D4: sequential ARGB bytes
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const offset = y * pitch + x * 4;
+                    const a = data[offset] || 255;
+                    const r = data[offset + 1] || 0;
+                    const g = data[offset + 2] || 0;
+                    const b = data[offset + 3] || 0;
+                    const dstOffset = (y * width + x) * 4;
+                    pixels[dstOffset] = r;
+                    pixels[dstOffset + 1] = g;
+                    pixels[dstOffset + 2] = b;
+                    pixels[dstOffset + 3] = a;
+                }
+            }
+        }
+    } else {
+        throw new Error(`Unsupported bit depth: ${bitsPerPixel}`);
     }
+
+    ctx.putImageData(imageData, 0, 0);
+    canvas.classList.remove('hidden');
 }
 
 // Mac Roman to Unicode mapping for extended characters

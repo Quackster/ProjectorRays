@@ -30,7 +30,7 @@ body {
 
 /* ===== Page chrome (centered fixed width like 2004) ===== */
 header, main, footer {
-  width: 760px;
+  width: 80vw;
   margin: 0 auto;
 }
 
