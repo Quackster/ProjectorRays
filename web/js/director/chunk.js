@@ -185,6 +185,7 @@ export class CastChunk extends Chunk {
 
     populate(castName, id, minMember) {
         this.name = castName;
+        console.log('CastChunk.populate:', castName, 'id:', id, 'minMember:', minMember);
 
         // Find script context
         for (const entry of this.dir.keyTable.entries) {
@@ -202,6 +203,8 @@ export class CastChunk extends Chunk {
             if (sectionID > 0) {
                 const member = this.dir.getChunk(FOURCC('C', 'A', 'S', 't'), sectionID);
                 member.id = i + minMember;
+                member.castSectionID = sectionID;  // Store the CASt chunk's section ID
+                member.castLibID = id;  // Store the cast library ID
                 if (this.lctx && this.lctx.scripts.has(member.getScriptID())) {
                     member.script = this.lctx.scripts.get(member.getScriptID());
                     member.script.member = member;
