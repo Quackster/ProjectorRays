@@ -89,16 +89,6 @@ function init() {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
-    // Palette selector change event - re-render bitmap with new palette
-    const paletteTypeSelect = document.getElementById('palette-type');
-    if (paletteTypeSelect) {
-        paletteTypeSelect.addEventListener('change', () => {
-            if (selectedAsset && selectedAsset.member && selectedAsset.member.type === MemberType.kBitmapMember) {
-                // Re-display the asset with new palette
-                refreshAssetDisplay();
-            }
-        });
-    }
 }
 
 function switchTab(tab) {
@@ -433,12 +423,6 @@ function refreshAssetDisplay() {
     assetText.classList.add('hidden');
     assetBinary.classList.add('hidden');
 
-    // Hide palette selector by default (will be shown for bitmap assets)
-    const paletteSelector = document.getElementById('palette-selector');
-    if (paletteSelector) {
-        paletteSelector.classList.add('hidden');
-    }
-
     // Show asset info
     let infoHtml = `
         <p><strong>Name:</strong> ${escapeHtml(selectedAsset.name)}</p>
@@ -485,20 +469,29 @@ function refreshAssetDisplay() {
     }
 }
 
-// Default Mac system palette (256 colors) - commonly used in Director
-// In Director's Mac palette, index 0 = white, index 255 = black
-const MAC_PALETTE = generateMacPalette();
+// Built-in palette IDs following ScummVM's Director engine
+// These match the PaletteType enum values from ScummVM
+const PaletteType = {
+    kClutSystemMac: -1,
+    kClutRainbow: -2,
+    kClutGrayscale: -3,
+    kClutPastels: -4,
+    kClutVivid: -5,
+    kClutNTSC: -6,
+    kClutMetallic: -7,
+    kClutWeb216: -8,
+    kClutSystemWin: -101,
+    kClutSystemWinD5: -102
+};
 
-function generateMacPalette() {
+// Generate Mac System palette (256 colors)
+// This is the classic Macintosh system palette used by Director
+function generateSystemMacPalette() {
     const palette = new Array(256);
 
-    // Mac system palette (clut #8) structure:
-    // Uses a 6x6x6 color cube but with index 0 = white, index 255 = black
-    // The cube is arranged so that lower indices are brighter
-
+    // The Mac system palette uses a 6x6x6 color cube for indices 0-215
+    // with index 0 = white, arranged so lower indices are brighter
     for (let i = 0; i < 215; i++) {
-        // 6x6x6 color cube (216 colors, but we leave room for special colors)
-        // Arranged so that lower indices = brighter colors
         const r = 5 - Math.floor(i / 36);
         const g = 5 - Math.floor((i % 36) / 6);
         const b = 5 - (i % 6);
@@ -513,18 +506,14 @@ function generateMacPalette() {
 
     // Index 255 = Black
     palette[255] = [0, 0, 0];
-
     // Override index 0 to ensure it's white
     palette[0] = [255, 255, 255];
 
     return palette;
 }
 
-// Simple linear greyscale palette (index 0 = white, index 255 = black)
-// This follows Director's convention where lower indices are brighter
-const GREYSCALE_PALETTE = generateGreyscalePalette();
-
-function generateGreyscalePalette() {
+// Generate Grayscale palette (256 levels from white to black)
+function generateGrayscalePalette() {
     const palette = new Array(256);
     for (let i = 0; i < 256; i++) {
         // Linear interpolation: index 0 = white (255), index 255 = black (0)
@@ -534,62 +523,69 @@ function generateGreyscalePalette() {
     return palette;
 }
 
-// PhotoRenderer's specific Habbo greyscale palette
-// This is the exact palette used by PhotoRenderer for Habbo photos
-const HABBO_GREYSCALE_PALETTE = [
-    [255,255,255],[254,254,254],[255,255,255],[253,253,253],[252,252,252],
-    [251,251,251],[250,250,250],[249,249,249],[248,248,248],[247,247,247],
-    [246,246,246],[245,245,245],[244,244,244],[243,243,243],[255,255,255],
-    [242,242,242],[241,241,241],[240,240,240],[239,239,239],[238,238,238],
-    [237,237,237],[236,236,236],[235,235,235],[234,234,234],[233,233,233],
-    [232,232,232],[255,255,255],[231,231,231],[230,230,230],[229,229,229],
-    [228,228,228],[227,227,227],[223,223,223],[222,222,222],[255,255,255],
-    [221,221,221],[220,220,220],[219,219,219],[218,218,218],[217,217,217],
-    [216,216,216],[215,215,215],[214,214,214],[213,213,213],[212,212,212],
-    [211,211,211],[255,255,255],[210,210,210],[209,209,209],[208,208,208],
-    [207,207,207],[206,206,206],[205,205,205],[204,204,204],[203,203,203],
-    [202,202,202],[201,201,201],[200,200,200],[255,255,255],[199,199,199],
-    [198,198,198],[197,197,197],[196,196,196],[195,195,195],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
-    [255,255,255],[191,191,191],[190,190,190],[255,255,255],[189,189,189],
-    [188,188,188],[187,187,187],[186,186,186],[185,185,185],[184,184,184],
-    [183,183,183],[182,182,182],[181,181,181],[180,180,180],[179,179,179],
-    [255,255,255],[178,178,178],[177,177,177],[176,176,176],[175,175,175],
-    [174,174,174],[173,173,173],[172,172,172],[171,171,171],[170,170,170],
-    [169,169,169],[168,168,168],[255,255,255],[167,167,167],[166,166,166],
-    [165,165,165],[164,164,164],[163,163,163],[159,159,159],[158,158,158],
-    [255,255,255],[157,157,157],[156,156,156],[155,155,155],[154,154,154],
-    [153,153,153],[152,152,152],[151,151,151],[150,150,150],[149,149,149],
-    [148,148,148],[147,147,147],[255,255,255],[146,146,146],[145,145,145],
-    [144,144,144],[143,143,143],[142,142,142],[141,141,141],[140,140,140],
-    [139,139,139],[138,138,138],[137,137,137],[136,136,136],[255,255,255],
-    [135,135,135],[134,134,134],[133,133,133],[132,132,132],[131,131,131],
-    [127,127,127],[126,126,126],[255,255,255],[125,125,125],[124,124,124],
-    [123,123,123],[122,122,122],[121,121,121],[120,120,120],[119,119,119],
-    [118,118,118],[117,117,117],[116,116,116],[115,115,115],[255,255,255],
-    [114,114,114],[113,113,113],[112,112,112],[111,111,111],[110,110,110],
-    [109,109,109],[108,108,108],[107,107,107],[106,106,106],[105,105,105],
-    [104,104,104],[255,255,255],[103,103,103],[102,102,102],[101,101,101],
-    [100,100,100],[99,99,99],[95,95,95],[94,94,94],[255,255,255],
-    [93,93,93],[92,92,92],[91,91,91],[90,90,90],[89,89,89],
-    [88,88,88],[87,87,87],[86,86,86],[85,85,85],[84,84,84],
-    [83,83,83],[255,255,255],[82,82,82],[81,81,81],[80,80,80],
-    [79,79,79],[78,78,78],[77,77,77],[76,76,76],[75,75,75],
-    [74,74,74],[73,73,73],[72,72,72],[255,255,255],[71,71,71],
-    [70,70,70],[69,69,69],[68,68,68],[67,67,67],[63,63,63],
-    [62,62,62],[255,255,255],[61,61,61],[60,60,60],[59,59,59],
-    [58,58,58],[57,57,57],[56,56,56],[55,55,55],[54,54,54],
-    [53,53,53],[52,52,52],[51,51,51],[255,255,255],[50,50,50],
-    [49,49,49],[48,48,48],[47,47,47],[46,46,46],[45,45,45],
-    [44,44,44],[43,43,43],[42,42,42],[41,41,41],[40,40,40],
-    [255,255,255],[39,39,39],[38,38,38],[37,37,37],[36,36,36],
-    [35,35,35],[0,0,0],[0,0,0],[0,0,0],[0,0,0]  // Pad to 256 entries
-];
+// Generate Rainbow palette
+function generateRainbowPalette() {
+    const palette = new Array(256);
+    for (let i = 0; i < 256; i++) {
+        // HSV to RGB conversion with H varying from 0 to 360
+        const h = (i / 255) * 360;
+        const s = 1.0;
+        const v = 1.0;
+        const c = v * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = v - c;
+        let r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        palette[i] = [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+    }
+    return palette;
+}
+
+// Cache of built-in palettes (generated on demand)
+const builtInPalettes = {};
+
+// Get a built-in palette by its ID
+function getBuiltInPalette(paletteId) {
+    // Check cache first
+    if (builtInPalettes[paletteId]) {
+        return builtInPalettes[paletteId];
+    }
+
+    let palette;
+    switch (paletteId) {
+        case PaletteType.kClutSystemMac:
+        case PaletteType.kClutSystemWin:
+        case PaletteType.kClutSystemWinD5:
+            palette = generateSystemMacPalette();
+            break;
+        case PaletteType.kClutGrayscale:
+            palette = generateGrayscalePalette();
+            break;
+        case PaletteType.kClutRainbow:
+            palette = generateRainbowPalette();
+            break;
+        case PaletteType.kClutPastels:
+        case PaletteType.kClutVivid:
+        case PaletteType.kClutNTSC:
+        case PaletteType.kClutMetallic:
+        case PaletteType.kClutWeb216:
+            // For unsupported palettes, fall back to Mac System
+            palette = generateSystemMacPalette();
+            break;
+        default:
+            // Unknown built-in palette, use Mac System as default
+            palette = generateSystemMacPalette();
+            break;
+    }
+
+    builtInPalettes[paletteId] = palette;
+    return palette;
+}
 
 // Parse a CLUT chunk into a palette array
 function parseCLUTChunk(clutData) {
@@ -612,52 +608,141 @@ function parseCLUTChunk(clutData) {
     return palette;
 }
 
-// Find the appropriate palette for a bitmap based on its palette ID
-function findPaletteForBitmap(paletteId, paletteTypeOverride = 'auto', isPhotoRendererFormat = false) {
-    // If user has selected a specific palette type, use it
-    if (paletteTypeOverride === 'greyscale') {
-        return GREYSCALE_PALETTE;
-    }
-    if (paletteTypeOverride === 'mac') {
-        return MAC_PALETTE;
-    }
-    if (paletteTypeOverride === 'habbo') {
-        return HABBO_GREYSCALE_PALETTE;
+// Parse the palette ID from a bitmap member's specificData
+// Following ScummVM's BitmapCastMember parsing logic
+function parseBitmapPaletteId(specificData, version) {
+    if (!specificData || specificData.length < 24) {
+        return { paletteId: PaletteType.kClutSystemMac, castLib: -1 };
     }
 
-    // Auto mode: detect based on palette ID and format
-    // paletteId of -3 or -2 typically means greyscale in Director
-    if (paletteId === -3 || paletteId === -2) {
-        // For PhotoRenderer format, use the specific Habbo palette
-        if (isPhotoRendererFormat) {
-            return HABBO_GREYSCALE_PALETTE;
+    const bytes = toUint8Array(specificData);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    // Check if high bit of first word is set (indicates extended data)
+    const bytesFlag = view.getUint16(0, false);
+    const hasExtendedData = (bytesFlag & 0x8000) !== 0;
+
+    if (!hasExtendedData) {
+        // No palette info in specificData, use default
+        return { paletteId: PaletteType.kClutSystemMac, castLib: -1 };
+    }
+
+    // For Director version >= 400, palette info is at different offsets
+    // specificData layout for D4+:
+    // 0-1: totalWidth (with high bit flag)
+    // 2-9: initialRect (top, left, bottom, right)
+    // 10-17: boundingRect
+    // 18-21: regPoint (y, x)
+    // 22: skip 1 byte (or flags)
+    // 23: bitsPerPixel
+    // 24-25: clutCastLib (for D5+)
+    // 26-27: clutId (or 24-25 for D4)
+
+    let paletteId = PaletteType.kClutSystemMac;
+    let castLib = -1;
+
+    try {
+        if (version >= 500) {
+            // D5+: has castLib field
+            if (bytes.length >= 28) {
+                castLib = view.getInt16(24, false);
+                paletteId = view.getInt16(26, false);
+            }
+        } else if (version >= 400) {
+            // D4: no castLib field
+            if (bytes.length >= 26) {
+                paletteId = view.getInt16(24, false);
+            }
+        } else {
+            // Pre-D4: simpler format
+            // Palette ID after regPoint at offset 22
+            if (bytes.length >= 24) {
+                paletteId = view.getInt16(22, false);
+            }
         }
-        return GREYSCALE_PALETTE;
+
+        // ScummVM convention: built-in palettes are stored as (id - 1) in file
+        // So clutId <= 0 means built-in, need to subtract 1 to get actual ID
+        if (paletteId <= 0) {
+            paletteId = paletteId - 1;
+            castLib = -1;
+        }
+    } catch (e) {
+        console.warn('Error parsing palette ID:', e);
     }
 
-    // paletteId > 0 references a cast member (try to look up CLUT)
+	paletteId = 0;
+    console.log('Parsed palette ID:', paletteId, 'castLib:', castLib);
+    return { paletteId, castLib };
+}
+
+// Get the palette for a bitmap by looking up its palette reference
+// Following ScummVM's approach: negative IDs are built-in, positive are cast members
+function getPaletteForBitmap(bitmapMember) {
+    const version = currentDirFile?.version || 500;
+    const { paletteId, castLib } = parseBitmapPaletteId(bitmapMember.specificData, version);
+
+    // Built-in palette (negative ID)
+    if (paletteId < 0) {
+        console.log('Using built-in palette:', paletteId);
+        return {
+            palette: getBuiltInPalette(paletteId),
+            name: getPaletteName(paletteId),
+            id: paletteId
+        };
+    }
+
+    // Cast member palette (positive ID) - look up CLUT chunk
     if (paletteId > 0 && currentDirFile) {
         try {
-            // Try to find CLUT chunk for this palette member
             const keyTable = currentDirFile.keyTable;
             if (keyTable) {
+                const clutFourCC = FOURCC('C', 'L', 'U', 'T');
                 for (const entry of keyTable.entries) {
-                    if (entry.castID === paletteId && entry.fourCC === FOURCC('C', 'L', 'U', 'T')) {
-                        const clutData = currentDirFile.getChunkData(FOURCC('C', 'L', 'U', 'T'), entry.sectionID);
+                    if (entry.castID === paletteId && entry.fourCC === clutFourCC) {
+                        const clutData = currentDirFile.getChunkData(clutFourCC, entry.sectionID);
                         if (clutData) {
-                            console.log('Found CLUT palette for ID:', paletteId);
-                            return parseCLUTChunk(clutData);
+                            console.log('Found CLUT palette for cast member ID:', paletteId);
+                            return {
+                                palette: parseCLUTChunk(clutData),
+                                name: `Cast Member #${paletteId}`,
+                                id: paletteId
+                            };
                         }
                     }
                 }
             }
         } catch (e) {
-            console.warn('Error looking up palette:', e);
+            console.warn('Error looking up CLUT palette:', e);
         }
     }
 
-    // Default fallback to Mac palette
-    return MAC_PALETTE;
+    // Default fallback to Mac System palette
+    console.log('Using default Mac System palette');
+    return {
+        palette: getBuiltInPalette(PaletteType.kClutSystemMac),
+        name: 'System - Mac',
+        id: PaletteType.kClutSystemMac
+    };
+}
+
+// Get human-readable name for a palette ID
+function getPaletteName(paletteId) {
+    switch (paletteId) {
+        case PaletteType.kClutSystemMac: return 'System - Mac';
+        case PaletteType.kClutRainbow: return 'Rainbow';
+        case PaletteType.kClutGrayscale: return 'Grayscale';
+        case PaletteType.kClutPastels: return 'Pastels';
+        case PaletteType.kClutVivid: return 'Vivid';
+        case PaletteType.kClutNTSC: return 'NTSC';
+        case PaletteType.kClutMetallic: return 'Metallic';
+        case PaletteType.kClutWeb216: return 'Web 216';
+        case PaletteType.kClutSystemWin: return 'System - Win';
+        case PaletteType.kClutSystemWinD5: return 'System - Win (D5)';
+        default:
+            if (paletteId > 0) return `Cast Member #${paletteId}`;
+            return `Unknown (${paletteId})`;
+    }
 }
 
 // Try to parse BITD data using PhotoRenderer format (with header at offset 28)
@@ -741,13 +826,6 @@ function displayBitmap(asset) {
     console.log('  dataChunkId:', asset.dataChunkId);
     console.log('  member.specificData length:', member.specificData?.length);
 
-    // Show the palette selector for bitmap assets
-    const paletteSelector = document.getElementById('palette-selector');
-    const paletteTypeSelect = document.getElementById('palette-type');
-    if (paletteSelector) {
-        paletteSelector.classList.remove('hidden');
-    }
-
     // Try to get the BITD chunk data first
     let bitdData = null;
     if (asset.dataChunkId && currentDirFile.chunkExists(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId)) {
@@ -768,24 +846,24 @@ function displayBitmap(asset) {
             // Use PhotoRenderer format
             const { width, height, bitDepth, totalWidth, paletteId, pixelDataOffset } = photoFormat;
 
-            // Get the selected palette type from UI
-            const paletteTypeOverride = paletteTypeSelect ? paletteTypeSelect.value : 'auto';
-            const palette = findPaletteForBitmap(paletteId, paletteTypeOverride, true); // true = PhotoRenderer format
-            const paletteName = paletteTypeOverride !== 'auto' ? paletteTypeOverride :
-                              (paletteId === -3 || paletteId === -2 ? 'habbo (auto)' :
-                               paletteId > 0 ? `custom #${paletteId}` : 'mac (default)');
+            // Get palette using ScummVM-style lookup
+            // PhotoRenderer palette ID is stored directly (not adjusted)
+            const adjustedPaletteId = paletteId <= 0 ? paletteId - 1 : paletteId;
+            const paletteInfo = paletteId < 0 ?
+                { palette: getBuiltInPalette(adjustedPaletteId), name: getPaletteName(adjustedPaletteId), id: adjustedPaletteId } :
+                getPaletteForBitmap(member);
 
             assetInfo.innerHTML += `
                 <p><strong>Format:</strong> PhotoRenderer/Habbo</p>
                 <p><strong>Dimensions:</strong> ${width} x ${height}</p>
                 <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
                 <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
-                <p><strong>Palette:</strong> ${paletteName} (ID: ${paletteId})</p>
+                <p><strong>Palette:</strong> ${paletteInfo.name} (ID: ${paletteInfo.id})</p>
             `;
 
             // Extract pixel data starting at pixelDataOffset
             const pixelData = bitdBytes.slice(pixelDataOffset);
-            renderBitmapToCanvas(pixelData, width, height, bitDepth, totalWidth, palette, true); // Use PhotoRenderer RLE
+            renderBitmapToCanvas(pixelData, width, height, bitDepth, totalWidth, paletteInfo.palette, true); // Use PhotoRenderer RLE
             return;
         }
     }
@@ -819,10 +897,6 @@ function displayBitmap(asset) {
         const height = bottom - top;
 
         let bitDepth = 8; // Default
-        let paletteId = 0;
-
-        // The high bit of totalWidth indicates if we have extended data
-        const hasExtendedData = (view.getUint16(0, false) & 0x8000) !== 0;
 
         if (bytes.length >= 24) {
             // Try to get bit depth - location varies by version
@@ -842,13 +916,6 @@ function displayBitmap(asset) {
             }
         }
 
-        // Try to parse palette ID from specificData
-        if (bytes.length >= 26) {
-            // Palette reference location varies by version
-            paletteId = view.getInt16(24, false);
-            console.log('  Parsed paletteId from specificData:', paletteId);
-        }
-
         // Calculate expected row width if not provided
         if (totalWidth === 0) {
             totalWidth = Math.ceil((width * bitDepth) / 8);
@@ -856,14 +923,8 @@ function displayBitmap(asset) {
             if (totalWidth % 2 !== 0) totalWidth++;
         }
 
-        // Get the selected palette type from UI
-        const paletteTypeOverride = paletteTypeSelect ? paletteTypeSelect.value : 'auto';
-
-        // Get the appropriate palette
-        const palette = findPaletteForBitmap(paletteId, paletteTypeOverride);
-        const paletteName = paletteTypeOverride !== 'auto' ? paletteTypeOverride :
-                          (paletteId === -3 || paletteId === -2 ? 'greyscale (auto)' :
-                           paletteId > 0 ? `custom #${paletteId}` : 'mac (default)');
+        // Get the appropriate palette using ScummVM-style lookup
+        const paletteInfo = getPaletteForBitmap(member);
 
         // Update info with dimensions
         assetInfo.innerHTML += `
@@ -871,11 +932,11 @@ function displayBitmap(asset) {
             <p><strong>Dimensions:</strong> ${width} x ${height}</p>
             <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
             <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
-            <p><strong>Palette:</strong> ${paletteName}</p>
+            <p><strong>Palette:</strong> ${paletteInfo.name} (ID: ${paletteInfo.id})</p>
         `;
 
         if (bitdData) {
-            renderBitmapToCanvas(bitdData, width, height, bitDepth, totalWidth, palette, false); // Use standard PackBits
+            renderBitmapToCanvas(bitdData, width, height, bitDepth, totalWidth, paletteInfo.palette, false); // Use standard PackBits
         } else {
             console.log('  No BITD chunk found, showing binary data');
             assetInfo.innerHTML += `<p><strong>Note:</strong> Bitmap data chunk not found</p>`;
@@ -952,8 +1013,8 @@ function decompressPackBits(compressed, expectedSize) {
 function renderBitmapToCanvas(data, width, height, bitDepth, rowStride, palette = null, usePhotoRendererRLE = false) {
     console.log('renderBitmapToCanvas:', { width, height, bitDepth, rowStride, dataSize: data?.length || data?.byteLength, usePhotoRendererRLE });
 
-    // Use provided palette or fall back to MAC_PALETTE
-    palette = palette || MAC_PALETTE;
+    // Use provided palette or fall back to System Mac palette
+    palette = palette || getBuiltInPalette(PaletteType.kClutSystemMac);
 
     if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
         console.log('  Invalid dimensions, showing error');
