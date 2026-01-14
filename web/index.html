@@ -48,6 +48,27 @@
                     <ul id="script-list"></ul>
                 </div>
                 <div id="assets-tab" class="tab-content">
+                    <div id="asset-filters">
+                        <input type="text" id="asset-search" placeholder="Search assets...">
+                        <div id="type-filters">
+                            <div id="type-filter-actions">
+                                <button id="select-all-types" type="button">All</button>
+                                <button id="select-none-types" type="button">None</button>
+                            </div>
+                            <label><input type="checkbox" value="Bitmap" checked> Bitmap</label>
+                            <label><input type="checkbox" value="Sound" checked> Sound</label>
+                            <label><input type="checkbox" value="Text" checked> Text</label>
+                            <label><input type="checkbox" value="Palette" checked> Palette</label>
+                            <label><input type="checkbox" value="Shape" checked> Shape</label>
+                            <label><input type="checkbox" value="Button" checked> Button</label>
+                            <label><input type="checkbox" value="Film Loop" checked> Film Loop</label>
+                            <label><input type="checkbox" value="Picture" checked> Picture</label>
+                            <label><input type="checkbox" value="Movie" checked> Movie</label>
+                            <label><input type="checkbox" value="Digital Video" checked> Video</label>
+                            <label><input type="checkbox" value="Rich Text" checked> Rich Text</label>
+                        </div>
+                        <div id="asset-count"></div>
+                    </div>
                     <ul id="asset-list"></ul>
                 </div>
             </div>
@@ -75,6 +96,9 @@
                     <div id="asset-preview">
                         <div id="asset-info"></div>
                         <canvas id="asset-canvas" class="hidden"></canvas>
+                        <div id="audio-player" class="hidden">
+                            <audio id="sound-preview" controls></audio>
+                        </div>
                         <pre id="asset-text" class="hidden"></pre>
                         <div id="asset-binary" class="hidden"></div>
                     </div>

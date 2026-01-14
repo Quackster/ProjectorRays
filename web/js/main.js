@@ -89,6 +89,40 @@ function init() {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    // Asset filter controls
+    const assetSearch = document.getElementById('asset-search');
+    if (assetSearch) {
+        let searchTimeout;
+        assetSearch.addEventListener('input', () => {
+            // Debounce search input
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(populateAssetList, 150);
+        });
+    }
+
+    // Type filter checkboxes
+    const typeFilters = document.querySelectorAll('#type-filters input[type="checkbox"]');
+    typeFilters.forEach(cb => {
+        cb.addEventListener('change', populateAssetList);
+    });
+
+    // Select All/None buttons
+    const selectAllBtn = document.getElementById('select-all-types');
+    const selectNoneBtn = document.getElementById('select-none-types');
+
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => {
+            typeFilters.forEach(cb => cb.checked = true);
+            populateAssetList();
+        });
+    }
+
+    if (selectNoneBtn) {
+        selectNoneBtn.addEventListener('click', () => {
+            typeFilters.forEach(cb => cb.checked = false);
+            populateAssetList();
+        });
+    }
 }
 
 function switchTab(tab) {
@@ -347,19 +381,63 @@ function populateScriptList() {
     }
 }
 
+// Get selected asset types from checkboxes
+function getSelectedAssetTypes() {
+    const checkboxes = document.querySelectorAll('#type-filters input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// Get filtered assets based on search and type filters
+function getFilteredAssets() {
+    const searchInput = document.getElementById('asset-search');
+    const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const selectedTypes = getSelectedAssetTypes();
+
+    return assets.filter(asset => {
+        // Check type filter
+        const matchesType = selectedTypes.length === 0 || selectedTypes.includes(asset.typeName);
+        if (!matchesType) return false;
+
+        // Check search filter
+        if (!searchText) return true;
+        const matchesName = asset.name.toLowerCase().includes(searchText);
+        const matchesId = asset.id.toString().includes(searchText);
+        return matchesName || matchesId;
+    });
+}
+
+// Store filtered assets with their original indices for selection
+let filteredAssetIndices = [];
+
 function populateAssetList() {
     assetList.innerHTML = '';
 
-    for (let i = 0; i < assets.length; i++) {
-        const asset = assets[i];
+    const filtered = getFilteredAssets();
+    filteredAssetIndices = [];
+
+    // Map filtered assets to their original indices
+    filtered.forEach(asset => {
+        const originalIndex = assets.indexOf(asset);
+        filteredAssetIndices.push(originalIndex);
+    });
+
+    for (let i = 0; i < filtered.length; i++) {
+        const asset = filtered[i];
+        const originalIndex = filteredAssetIndices[i];
         const li = document.createElement('li');
         li.innerHTML = `
             <span class="asset-name">${escapeHtml(asset.name)}</span>
             <span class="asset-type">${escapeHtml(asset.typeName)}</span>
             <span class="asset-id">#${asset.id}</span>
         `;
-        li.addEventListener('click', () => selectAsset(i));
+        li.addEventListener('click', () => selectAsset(originalIndex));
         assetList.appendChild(li);
+    }
+
+    // Update asset count display
+    const assetCount = document.getElementById('asset-count');
+    if (assetCount) {
+        assetCount.textContent = `Showing ${filtered.length} of ${assets.length} assets`;
     }
 }
 
@@ -395,9 +473,118 @@ function selectAsset(index) {
     refreshAssetDisplay();
 }
 
+// Lingo syntax highlighter - Classic IDE colors
+const LINGO_KEYWORDS = new Set([
+    'on', 'end', 'if', 'then', 'else', 'repeat', 'while', 'with', 'in', 'to', 'down',
+    'case', 'of', 'otherwise', 'tell', 'exit', 'next', 'return', 'do',
+    'property', 'global', 'instance', 'method', 'factory',
+    'set', 'put', 'into', 'after', 'before', 'new', 'delete', 'play', 'go', 'halt',
+    'continue', 'pass', 'nothing', 'me', 'ancestor'
+]);
+
+const LINGO_OPERATORS = new Set([
+    'and', 'or', 'not', 'mod', 'contains', 'starts'
+]);
+
+const LINGO_BUILTINS = new Set([
+    'the', 'sprite', 'member', 'cast', 'castLib', 'field', 'window', 'menu',
+    'void', 'true', 'false', 'VOID', 'TRUE', 'FALSE',
+    'EMPTY', 'RETURN', 'ENTER', 'TAB', 'SPACE', 'QUOTE', 'BACKSPACE',
+    'PI', 'point', 'rect', 'rgb', 'color', 'list', 'image'
+]);
+
+function escapeHtmlForHighlight(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function highlightLingo(code) {
+    // Process line by line to handle comments properly
+    const lines = code.split('\n');
+    const highlightedLines = lines.map(line => {
+        let result = '';
+        let i = 0;
+
+        while (i < line.length) {
+            // Check for comment (-- to end of line)
+            if (line[i] === '-' && line[i + 1] === '-') {
+                const comment = escapeHtmlForHighlight(line.slice(i));
+                result += `<span class="hl-comment">${comment}</span>`;
+                break;
+            }
+
+            // Check for string
+            if (line[i] === '"') {
+                let end = i + 1;
+                while (end < line.length && line[end] !== '"') {
+                    if (line[end] === '\\') end++; // Skip escaped char
+                    end++;
+                }
+                if (end < line.length) end++; // Include closing quote
+                const str = escapeHtmlForHighlight(line.slice(i, end));
+                result += `<span class="hl-string">${str}</span>`;
+                i = end;
+                continue;
+            }
+
+            // Check for symbol (#identifier)
+            if (line[i] === '#') {
+                let end = i + 1;
+                while (end < line.length && /[\w]/.test(line[end])) end++;
+                const symbol = escapeHtmlForHighlight(line.slice(i, end));
+                result += `<span class="hl-symbol">${symbol}</span>`;
+                i = end;
+                continue;
+            }
+
+            // Check for number
+            if (/\d/.test(line[i]) || (line[i] === '-' && /\d/.test(line[i + 1]))) {
+                let end = i;
+                if (line[end] === '-') end++;
+                while (end < line.length && /[\d.]/.test(line[end])) end++;
+                const num = escapeHtmlForHighlight(line.slice(i, end));
+                result += `<span class="hl-number">${num}</span>`;
+                i = end;
+                continue;
+            }
+
+            // Check for identifier/keyword
+            if (/[a-zA-Z_]/.test(line[i])) {
+                let end = i;
+                while (end < line.length && /[\w]/.test(line[end])) end++;
+                const word = line.slice(i, end);
+                const wordLower = word.toLowerCase();
+                const escaped = escapeHtmlForHighlight(word);
+
+                if (LINGO_KEYWORDS.has(wordLower)) {
+                    result += `<span class="hl-keyword">${escaped}</span>`;
+                } else if (LINGO_OPERATORS.has(wordLower)) {
+                    result += `<span class="hl-operator">${escaped}</span>`;
+                } else if (LINGO_BUILTINS.has(word) || LINGO_BUILTINS.has(wordLower)) {
+                    result += `<span class="hl-builtin">${escaped}</span>`;
+                } else {
+                    result += escaped;
+                }
+                i = end;
+                continue;
+            }
+
+            // Other characters (operators, punctuation, whitespace)
+            result += escapeHtmlForHighlight(line[i]);
+            i++;
+        }
+
+        return result;
+    });
+
+    return highlightedLines.join('\n');
+}
+
 function refreshCodeDisplay() {
     if (!selectedScript) {
-        codeDisplay.textContent = '';
+        codeDisplay.innerHTML = '';
         return;
     }
 
@@ -405,10 +592,10 @@ function refreshCodeDisplay() {
 
     try {
         const code = selectedScript.script.scriptText('\n', dotSyntax);
-        codeDisplay.textContent = code;
+        codeDisplay.innerHTML = highlightLingo(code);
     } catch (error) {
         console.error('Error generating script text:', error);
-        codeDisplay.textContent = '-- Error generating script text: ' + error.message;
+        codeDisplay.innerHTML = '<span class="hl-comment">-- Error generating script text: ' + escapeHtmlForHighlight(error.message) + '</span>';
     }
 }
 
@@ -422,6 +609,8 @@ function refreshAssetDisplay() {
     assetCanvas.classList.add('hidden');
     assetText.classList.add('hidden');
     assetBinary.classList.add('hidden');
+    const audioPlayer = document.getElementById('audio-player');
+    if (audioPlayer) audioPlayer.classList.add('hidden');
 
     // Show asset info
     let infoHtml = `
@@ -1431,35 +1620,240 @@ function displayPalette(asset) {
     displayBinaryData(asset);
 }
 
-function displaySound(asset) {
-    const member = asset.member;
+// Detect sound format from header bytes
+function detectSoundFormat(bytes) {
+    if (bytes.length < 12) return { format: 'unknown', mimeType: 'application/octet-stream', ext: '.bin' };
 
-    // Try to get sound info
-    if (asset.dataChunkId) {
-        assetInfo.innerHTML += `<p><strong>Sound Data:</strong> Chunk #${asset.dataChunkId}</p>`;
-    }
+    const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
 
-    if (member.specificData && member.specificData.length >= 4) {
-        const bytes = toUint8Array(member.specificData);
-        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-        try {
-            // Sound member specific data varies by format
-            // Just show what data we have
-            assetInfo.innerHTML += `<p><strong>Format Data:</strong> ${bytes.length} bytes</p>`;
-        } catch (e) {
-            console.error('Error parsing sound:', e);
+    // Check for AIFF: 'FORM' + size + 'AIFF' or 'AIFC'
+    if (magic === 'FORM') {
+        const type = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+        if (type === 'AIFF' || type === 'AIFC') {
+            return { format: 'aiff', mimeType: 'audio/aiff', ext: '.aiff' };
         }
     }
 
-    // Show a message that audio preview is not yet supported
-    assetBinary.innerHTML = `
-        <div style="text-align: center; padding: 2rem;">
-            <p style="color: #888; margin-bottom: 1rem;">Audio preview not yet supported.</p>
-            <p style="color: #666;">Use the Download button to save the sound data.</p>
-        </div>
+    // Check for WAV: 'RIFF' + size + 'WAVE'
+    if (magic === 'RIFF') {
+        const type = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+        if (type === 'WAVE') {
+            return { format: 'wav', mimeType: 'audio/wav', ext: '.wav' };
+        }
+    }
+
+    // Check for Mac SND resource format (type 1 or 2)
+    const sndType = (bytes[0] << 8) | bytes[1];
+    if (sndType === 1 || sndType === 2) {
+        return { format: 'snd', mimeType: 'audio/basic', ext: '.snd' };
+    }
+
+    // Check for MP3 (ID3 header or sync word)
+    if ((bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) || // 'ID3'
+        (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0)) { // MP3 sync
+        return { format: 'mp3', mimeType: 'audio/mpeg', ext: '.mp3' };
+    }
+
+    return { format: 'unknown', mimeType: 'application/octet-stream', ext: '.snd' };
+}
+
+// Convert Mac SND resource to WAV format for browser playback
+function convertSndToWav(sndBytes) {
+    try {
+        const view = new DataView(sndBytes.buffer, sndBytes.byteOffset, sndBytes.byteLength);
+        const sndType = view.getUint16(0, false); // Big-endian
+
+        let sampleRate = 22050; // Default
+        let numChannels = 1;
+        let bitsPerSample = 8;
+        let dataOffset = 0;
+        let dataLength = 0;
+
+        if (sndType === 1) {
+            // Type 1 SND: has data type list
+            const numDataFormats = view.getUint16(2, false);
+            let offset = 4;
+
+            for (let i = 0; i < numDataFormats; i++) {
+                const dataType = view.getUint16(offset, false);
+                offset += 2;
+                if (dataType === 5) { // sampled sound
+                    // Skip options
+                    offset += 4;
+                }
+            }
+
+            // Read sound commands
+            const numCommands = view.getUint16(offset, false);
+            offset += 2;
+
+            for (let i = 0; i < numCommands; i++) {
+                const cmd = view.getUint16(offset, false);
+                offset += 2;
+                const param1 = view.getUint16(offset, false);
+                offset += 2;
+                const param2 = view.getUint32(offset, false);
+                offset += 4;
+
+                if (cmd === 0x8051) { // bufferCmd with data offset
+                    dataOffset = param2;
+                }
+            }
+        } else if (sndType === 2) {
+            // Type 2 SND: simpler format
+            dataOffset = 4; // Data starts after header
+        }
+
+        if (dataOffset === 0 || dataOffset >= sndBytes.length) {
+            // Try to find sound header by scanning
+            dataOffset = 20; // Common offset
+        }
+
+        // Parse sound header at dataOffset
+        if (dataOffset + 22 <= sndBytes.length) {
+            const samplePtr = view.getUint32(dataOffset, false);
+            const numSamples = view.getUint32(dataOffset + 4, false);
+            const sampleRateFixed = view.getUint32(dataOffset + 8, false);
+            const loopStart = view.getUint32(dataOffset + 12, false);
+            const loopEnd = view.getUint32(dataOffset + 16, false);
+            const encoding = view.getUint8(dataOffset + 20);
+            const baseFreq = view.getUint8(dataOffset + 21);
+
+            // Sample rate is fixed-point 16.16
+            sampleRate = Math.round(sampleRateFixed / 65536);
+            if (sampleRate < 1000 || sampleRate > 96000) sampleRate = 22050;
+
+            dataOffset += 22; // Move past header to sample data
+            dataLength = numSamples > 0 ? numSamples : sndBytes.length - dataOffset;
+        } else {
+            dataLength = sndBytes.length - dataOffset;
+        }
+
+        // Extract PCM data
+        const pcmData = sndBytes.slice(dataOffset, dataOffset + dataLength);
+
+        // Build WAV file
+        const wavSize = 44 + pcmData.length;
+        const wavBuffer = new ArrayBuffer(wavSize);
+        const wavView = new DataView(wavBuffer);
+        const wavBytes = new Uint8Array(wavBuffer);
+
+        // RIFF header
+        wavBytes.set([0x52, 0x49, 0x46, 0x46], 0); // 'RIFF'
+        wavView.setUint32(4, wavSize - 8, true); // File size - 8
+        wavBytes.set([0x57, 0x41, 0x56, 0x45], 8); // 'WAVE'
+
+        // fmt chunk
+        wavBytes.set([0x66, 0x6D, 0x74, 0x20], 12); // 'fmt '
+        wavView.setUint32(16, 16, true); // Chunk size
+        wavView.setUint16(20, 1, true); // Audio format (PCM)
+        wavView.setUint16(22, numChannels, true);
+        wavView.setUint32(24, sampleRate, true);
+        wavView.setUint32(28, sampleRate * numChannels * bitsPerSample / 8, true); // Byte rate
+        wavView.setUint16(32, numChannels * bitsPerSample / 8, true); // Block align
+        wavView.setUint16(34, bitsPerSample, true);
+
+        // data chunk
+        wavBytes.set([0x64, 0x61, 0x74, 0x61], 36); // 'data'
+        wavView.setUint32(40, pcmData.length, true);
+        wavBytes.set(pcmData, 44);
+
+        return { data: wavBytes, sampleRate, numChannels, bitsPerSample, numSamples: pcmData.length };
+    } catch (e) {
+        console.error('Error converting SND to WAV:', e);
+        return null;
+    }
+}
+
+function displaySound(asset) {
+    const member = asset.member;
+
+    // Try to load sound data
+    let soundData = null;
+    if (asset.dataChunkId && currentDirFile.chunkExists(FOURCC('s', 'n', 'd', ' '), asset.dataChunkId)) {
+        try {
+            soundData = currentDirFile.getChunkData(FOURCC('s', 'n', 'd', ' '), asset.dataChunkId);
+        } catch (e) {
+            console.error('Error loading sound chunk:', e);
+        }
+    }
+
+    if (!soundData) {
+        assetInfo.innerHTML += `<p><strong>Status:</strong> No sound data found</p>`;
+        assetBinary.innerHTML = '<p>Sound data not available</p>';
+        assetBinary.classList.remove('hidden');
+        return;
+    }
+
+    const soundBytes = toUint8Array(soundData);
+    const formatInfo = detectSoundFormat(soundBytes);
+
+    assetInfo.innerHTML += `
+        <p><strong>Format:</strong> ${formatInfo.format.toUpperCase()}</p>
+        <p><strong>Size:</strong> ${soundBytes.length.toLocaleString()} bytes</p>
     `;
-    assetBinary.classList.remove('hidden');
+
+    // Store format info for download
+    asset.soundFormat = formatInfo;
+
+    // Try to play the audio
+    const audioPlayer = document.getElementById('audio-player');
+    const soundPreview = document.getElementById('sound-preview');
+
+    if (audioPlayer && soundPreview) {
+        let audioBlob = null;
+        let mimeType = formatInfo.mimeType;
+
+        if (formatInfo.format === 'aiff' || formatInfo.format === 'wav' || formatInfo.format === 'mp3') {
+            // These formats may be playable directly by the browser
+            audioBlob = new Blob([soundBytes], { type: mimeType });
+        } else if (formatInfo.format === 'snd') {
+            // Try to convert Mac SND to WAV
+            const wavResult = convertSndToWav(soundBytes);
+            if (wavResult) {
+                audioBlob = new Blob([wavResult.data], { type: 'audio/wav' });
+                mimeType = 'audio/wav';
+                assetInfo.innerHTML += `
+                    <p><strong>Sample Rate:</strong> ${wavResult.sampleRate} Hz</p>
+                    <p><strong>Channels:</strong> ${wavResult.numChannels}</p>
+                    <p><strong>Bits:</strong> ${wavResult.bitsPerSample}-bit</p>
+                `;
+            }
+        }
+
+        if (audioBlob) {
+            // Revoke previous URL if any
+            if (soundPreview.src && soundPreview.src.startsWith('blob:')) {
+                URL.revokeObjectURL(soundPreview.src);
+            }
+
+            const audioUrl = URL.createObjectURL(audioBlob);
+            soundPreview.src = audioUrl;
+            audioPlayer.classList.remove('hidden');
+
+            // Handle playback errors
+            soundPreview.onerror = () => {
+                console.warn('Audio playback not supported for this format');
+                audioPlayer.classList.add('hidden');
+                assetBinary.innerHTML = `
+                    <div style="text-align: center; padding: 1rem;">
+                        <p style="color: #888;">Audio preview not available for this format.</p>
+                        <p style="color: #666;">Use the Download button to save the sound file.</p>
+                    </div>
+                `;
+                assetBinary.classList.remove('hidden');
+            };
+        } else {
+            // Can't convert or play
+            assetBinary.innerHTML = `
+                <div style="text-align: center; padding: 1rem;">
+                    <p style="color: #888;">Audio preview not available for this format.</p>
+                    <p style="color: #666;">Use the Download button to save the sound file.</p>
+                </div>
+            `;
+            assetBinary.classList.remove('hidden');
+        }
+    }
 }
 
 function displayFilmLoop(asset) {
@@ -1575,8 +1969,16 @@ function downloadAsset() {
                         filename += '.bitd';
                         break;
                     case MemberType.kSoundMember:
-                        filename += '.snd';
-                        mimeType = 'audio/basic';
+                        // Use detected format if available
+                        if (selectedAsset.soundFormat) {
+                            filename += selectedAsset.soundFormat.ext;
+                            mimeType = selectedAsset.soundFormat.mimeType;
+                        } else {
+                            // Detect format from data
+                            const formatInfo = detectSoundFormat(data);
+                            filename += formatInfo.ext;
+                            mimeType = formatInfo.mimeType;
+                        }
                         break;
                     case MemberType.kTextMember:
                         filename += '.txt';

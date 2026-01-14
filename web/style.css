@@ -268,6 +268,51 @@ button:active,
   display: block;
 }
 
+/* Asset filters */
+#asset-filters {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ddd;
+  background: #f0f0f0;
+}
+
+#asset-search {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #999;
+  margin-bottom: 6px;
+}
+
+#type-filters {
+  font-size: 10px;
+}
+
+#type-filter-actions {
+  margin-bottom: 4px;
+}
+
+#type-filter-actions button {
+  padding: 2px 8px;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+#type-filters label {
+  display: inline-block;
+  margin-right: 6px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+#type-filters input[type="checkbox"] {
+  margin-right: 2px;
+}
+
+#asset-count {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+}
+
 #script-list, #asset-list {
   list-style: none;
 }
@@ -349,6 +394,37 @@ button:active,
   display: block;
 }
 
+/* Lingo syntax highlighting - Classic IDE colors */
+.hl-keyword {
+  color: #0000ff;
+  font-weight: bold;
+}
+
+.hl-operator {
+  color: #444444;
+}
+
+.hl-string {
+  color: #008000;
+}
+
+.hl-comment {
+  color: #808080;
+  font-style: italic;
+}
+
+.hl-number {
+  color: #ff6600;
+}
+
+.hl-symbol {
+  color: #990099;
+}
+
+.hl-builtin {
+  color: #008080;
+}
+
 /* Asset preview area */
 #asset-preview {
   background: #f8f8f8;
@@ -373,6 +449,18 @@ button:active,
   border: 1px solid #999;
   background: #fff;
   image-rendering: pixelated;
+}
+
+/* Audio player */
+#audio-player {
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  margin-bottom: 10px;
+}
+
+#sound-preview {
+  width: 100%;
 }
 
 #asset-text,
