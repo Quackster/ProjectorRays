@@ -492,34 +492,57 @@ function refreshAssetDisplay() {
 }
 
 // Default Mac system palette (256 colors) - commonly used in Director
+// In Director's Mac palette, index 0 = white, index 255 = black
 const MAC_PALETTE = generateMacPalette();
 
 function generateMacPalette() {
     const palette = new Array(256);
-    // Generate a reasonable approximation of the Mac system palette
-    // This is the standard 8-bit color cube + grays
-    for (let i = 0; i < 256; i++) {
-        if (i < 216) {
-            // 6x6x6 color cube
-            const r = Math.floor(i / 36) * 51;
-            const g = Math.floor((i % 36) / 6) * 51;
-            const b = (i % 6) * 51;
-            palette[i] = [r, g, b];
-        } else {
-            // Grayscale ramp for remaining colors
-            const gray = Math.floor((i - 216) * 255 / 39);
-            palette[i] = [gray, gray, gray];
-        }
+
+    // Mac system palette (clut #8) structure:
+    // Uses a 6x6x6 color cube but with index 0 = white, index 255 = black
+    // The cube is arranged so that lower indices are brighter
+
+    for (let i = 0; i < 215; i++) {
+        // 6x6x6 color cube (216 colors, but we leave room for special colors)
+        // Arranged so that lower indices = brighter colors
+        const r = 5 - Math.floor(i / 36);
+        const g = 5 - Math.floor((i % 36) / 6);
+        const b = 5 - (i % 6);
+        palette[i] = [r * 51, g * 51, b * 51];
     }
-    // Override some common indices
-    palette[0] = [255, 255, 255];   // White
-    palette[255] = [0, 0, 0];       // Black
+
+    // Indices 215-254: Grayscale ramp (bright to dark)
+    for (let i = 215; i < 255; i++) {
+        const gray = Math.round(255 - ((i - 215) * 255 / 39));
+        palette[i] = [gray, gray, gray];
+    }
+
+    // Index 255 = Black
+    palette[255] = [0, 0, 0];
+
+    // Override index 0 to ensure it's white
+    palette[0] = [255, 255, 255];
+
     return palette;
 }
 
-// Greyscale palette from PhotoRenderer (for Habbo/Shockwave photos)
-// This is the specific 256-entry grayscale palette used by Director for grayscale images
-const GREYSCALE_PALETTE = [
+// Simple linear greyscale palette (index 0 = white, index 255 = black)
+// This follows Director's convention where lower indices are brighter
+const GREYSCALE_PALETTE = generateGreyscalePalette();
+
+function generateGreyscalePalette() {
+    const palette = new Array(256);
+    for (let i = 0; i < 256; i++) {
+        // Linear interpolation: index 0 = white (255), index 255 = black (0)
+        const gray = 255 - i;
+        palette[i] = [gray, gray, gray];
+    }
+    return palette;
+}
+
+// PhotoRenderer's specific Habbo greyscale palette
+// This is the exact palette used by PhotoRenderer for Habbo photos
+const HABBO_GREYSCALE_PALETTE = [
     [255,255,255],[254,254,254],[255,255,255],[253,253,253],[252,252,252],
     [251,251,251],[250,250,250],[249,249,249],[248,248,248],[247,247,247],
     [246,246,246],[245,245,245],[244,244,244],[243,243,243],[255,255,255],
@@ -571,7 +594,7 @@ const GREYSCALE_PALETTE = [
     [49,49,49],[48,48,48],[47,47,47],[46,46,46],[45,45,45],
     [44,44,44],[43,43,43],[42,42,42],[41,41,41],[40,40,40],
     [255,255,255],[39,39,39],[38,38,38],[37,37,37],[36,36,36],
-    [35,35,35]
+    [35,35,35],[0,0,0],[0,0,0],[0,0,0],[0,0,0]  // Pad to 256 entries
 ];
 
 // Parse a CLUT chunk into a palette array
@@ -596,7 +619,7 @@ function parseCLUTChunk(clutData) {
 }
 
 // Find the appropriate palette for a bitmap based on its palette ID
-function findPaletteForBitmap(paletteId, paletteTypeOverride = 'auto') {
+function findPaletteForBitmap(paletteId, paletteTypeOverride = 'auto', isPhotoRendererFormat = false) {
     // If user has selected a specific palette type, use it
     if (paletteTypeOverride === 'greyscale') {
         return GREYSCALE_PALETTE;
@@ -604,10 +627,17 @@ function findPaletteForBitmap(paletteId, paletteTypeOverride = 'auto') {
     if (paletteTypeOverride === 'mac') {
         return MAC_PALETTE;
     }
+    if (paletteTypeOverride === 'habbo') {
+        return HABBO_GREYSCALE_PALETTE;
+    }
 
-    // Auto mode: detect based on palette ID
+    // Auto mode: detect based on palette ID and format
     // paletteId of -3 or -2 typically means greyscale in Director
     if (paletteId === -3 || paletteId === -2) {
+        // For PhotoRenderer format, use the specific Habbo palette
+        if (isPhotoRendererFormat) {
+            return HABBO_GREYSCALE_PALETTE;
+        }
         return GREYSCALE_PALETTE;
     }
 
@@ -746,9 +776,9 @@ function displayBitmap(asset) {
 
             // Get the selected palette type from UI
             const paletteTypeOverride = paletteTypeSelect ? paletteTypeSelect.value : 'auto';
-            const palette = findPaletteForBitmap(paletteId, paletteTypeOverride);
+            const palette = findPaletteForBitmap(paletteId, paletteTypeOverride, true); // true = PhotoRenderer format
             const paletteName = paletteTypeOverride !== 'auto' ? paletteTypeOverride :
-                              (paletteId === -3 || paletteId === -2 ? 'greyscale (auto)' :
+                              (paletteId === -3 || paletteId === -2 ? 'habbo (auto)' :
                                paletteId > 0 ? `custom #${paletteId}` : 'mac (default)');
 
             assetInfo.innerHTML += `
