@@ -39,22 +39,46 @@
         </section>
 
         <section id="content-section" class="hidden">
-            <div id="script-panel">
-                <h2>Scripts</h2>
-                <ul id="script-list"></ul>
+            <div id="left-panel">
+                <div id="panel-tabs">
+                    <button class="tab-btn active" data-tab="scripts">Scripts</button>
+                    <button class="tab-btn" data-tab="assets">Assets</button>
+                </div>
+                <div id="scripts-tab" class="tab-content active">
+                    <ul id="script-list"></ul>
+                </div>
+                <div id="assets-tab" class="tab-content">
+                    <ul id="asset-list"></ul>
+                </div>
             </div>
-            <div id="code-panel">
-                <div id="code-header">
-                    <h2 id="current-script-name">Select a script</h2>
-                    <div id="code-options">
-                        <label>
-                            <input type="checkbox" id="dot-syntax" checked>
-                            Dot Syntax
-                        </label>
-                        <button id="copy-btn" class="hidden">Copy</button>
+            <div id="right-panel">
+                <div id="code-panel">
+                    <div id="code-header">
+                        <h2 id="current-script-name">Select a script</h2>
+                        <div id="code-options">
+                            <label>
+                                <input type="checkbox" id="dot-syntax" checked>
+                                Dot Syntax
+                            </label>
+                            <button id="copy-btn" class="hidden">Copy</button>
+                        </div>
+                    </div>
+                    <pre id="code-display"><code></code></pre>
+                </div>
+                <div id="asset-panel" class="hidden">
+                    <div id="asset-header">
+                        <h2 id="current-asset-name">Select an asset</h2>
+                        <div id="asset-options">
+                            <button id="download-asset-btn" class="hidden">Download</button>
+                        </div>
+                    </div>
+                    <div id="asset-preview">
+                        <div id="asset-info"></div>
+                        <canvas id="asset-canvas" class="hidden"></canvas>
+                        <pre id="asset-text" class="hidden"></pre>
+                        <div id="asset-binary" class="hidden"></div>
                     </div>
                 </div>
-                <pre id="code-display"><code></code></pre>
             </div>
         </section>
     </main>

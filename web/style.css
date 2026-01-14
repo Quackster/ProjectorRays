@@ -194,9 +194,10 @@ button {
     min-height: 0;
 }
 
-#script-panel {
-    width: 250px;
-    min-width: 200px;
+/* Left Panel with Tabs */
+#left-panel {
+    width: 280px;
+    min-width: 220px;
     background-color: #16213e;
     border-radius: 8px;
     display: flex;
@@ -204,40 +205,82 @@ button {
     overflow: hidden;
 }
 
-#script-panel h2 {
-    padding: 0.75rem 1rem;
-    font-size: 1rem;
+#panel-tabs {
+    display: flex;
     border-bottom: 1px solid #0f3460;
 }
 
-#script-list {
-    list-style: none;
-    overflow-y: auto;
+.tab-btn {
     flex: 1;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+    border-radius: 0;
 }
 
-#script-list li {
+.tab-btn:hover {
+    background-color: #1a3a5e;
+    color: #eaeaea;
+}
+
+.tab-btn.active {
+    background-color: #0f3460;
+    color: #eaeaea;
+}
+
+.tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+#script-list, #asset-list {
+    list-style: none;
+}
+
+#script-list li, #asset-list li {
     padding: 0.5rem 1rem;
     cursor: pointer;
     border-bottom: 1px solid #0f3460;
     transition: background-color 0.2s;
 }
 
-#script-list li:hover {
+#script-list li:hover, #asset-list li:hover {
     background-color: #1a3a5e;
 }
 
-#script-list li.selected {
+#script-list li.selected, #asset-list li.selected {
     background-color: #0f3460;
 }
 
-#script-list .script-type {
+.script-type, .asset-type {
     font-size: 0.75rem;
     color: #888;
     display: block;
 }
 
-#code-panel {
+.asset-id {
+    font-size: 0.7rem;
+    color: #666;
+}
+
+/* Right Panel */
+#right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#code-panel, #asset-panel {
     flex: 1;
     background-color: #16213e;
     border-radius: 8px;
@@ -301,6 +344,115 @@ button {
     display: block;
 }
 
+/* Asset Panel */
+#asset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #0f3460;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+#asset-header h2 {
+    font-size: 1rem;
+}
+
+#asset-options {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#download-asset-btn {
+    background-color: #0f3460;
+    color: white;
+}
+
+#download-asset-btn:hover {
+    background-color: #1a4a7a;
+}
+
+#asset-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem;
+    background-color: #0d1421;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+#asset-info {
+    width: 100%;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background-color: #16213e;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+#asset-info p {
+    margin: 0.25rem 0;
+}
+
+#asset-info strong {
+    color: #e94560;
+}
+
+#asset-canvas {
+    max-width: 100%;
+    background-color: #222;
+    border: 1px solid #0f3460;
+    image-rendering: pixelated;
+}
+
+#asset-text {
+    width: 100%;
+    margin: 0;
+    padding: 1rem;
+    background-color: #16213e;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
+}
+
+#asset-binary {
+    width: 100%;
+    padding: 1rem;
+    background-color: #16213e;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    overflow: auto;
+}
+
+.hex-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.hex-offset {
+    color: #888;
+    min-width: 60px;
+}
+
+.hex-bytes {
+    color: #e94560;
+    min-width: 360px;
+}
+
+.hex-ascii {
+    color: #888;
+}
+
 /* Footer */
 footer {
     background-color: #16213e;
@@ -330,9 +482,9 @@ footer p {
         flex-direction: column;
     }
 
-    #script-panel {
+    #left-panel {
         width: 100%;
         min-width: 0;
-        max-height: 200px;
+        max-height: 250px;
     }
 }

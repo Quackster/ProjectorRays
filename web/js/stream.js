@@ -45,6 +45,18 @@ export class BufferView {
     get offset() {
         return this._offset;
     }
+
+    get byteOffset() {
+        return this._offset;
+    }
+
+    get byteLength() {
+        return this._length;
+    }
+
+    get length() {
+        return this._length;
+    }
 }
 
 /**
