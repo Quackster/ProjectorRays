@@ -10,3 +10,4 @@ fontmaps/*.h
 *.o
 /projectorrays
 /projectorrays.exe
+tmpcl**

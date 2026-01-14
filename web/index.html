@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectorRays Web Decompiler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>ProjectorRays Web Decompiler</h1>
+        <p>Adobe Director / Shockwave Lingo Script Decompiler</p>
+    </header>
+
+    <main>
+        <section id="upload-section">
+            <div id="drop-zone">
+                <p>Drag and drop a .cst, .cct, .dxr, or .dir file here</p>
+                <p>or</p>
+                <input type="file" id="file-input" accept=".cst,.cct,.dxr,.dir">
+                <label for="file-input" class="file-button">Choose File</label>
+            </div>
+            <div id="file-info" class="hidden">
+                <span id="file-name"></span>
+                <button id="download-btn" class="hidden">Download Original</button>
+                <button id="clear-btn">Clear</button>
+            </div>
+        </section>
+
+        <section id="loading-section" class="hidden">
+            <div class="spinner"></div>
+            <p>Processing file...</p>
+        </section>
+
+        <section id="error-section" class="hidden">
+            <h2>Error</h2>
+            <pre id="error-message"></pre>
+            <button id="error-dismiss">Dismiss</button>
+        </section>
+
+        <section id="content-section" class="hidden">
+            <div id="script-panel">
+                <h2>Scripts</h2>
+                <ul id="script-list"></ul>
+            </div>
+            <div id="code-panel">
+                <div id="code-header">
+                    <h2 id="current-script-name">Select a script</h2>
+                    <div id="code-options">
+                        <label>
+                            <input type="checkbox" id="dot-syntax" checked>
+                            Dot Syntax
+                        </label>
+                        <button id="copy-btn" class="hidden">Copy</button>
+                    </div>
+                </div>
+                <pre id="code-display"><code></code></pre>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>ProjectorRays - <a href="https://github.com/ProjectorRays/ProjectorRays" target="_blank">GitHub</a></p>
+        <p>Runs entirely in your browser - no server upload required</p>
+    </footer>
+
+    <!-- pako for zlib decompression -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
