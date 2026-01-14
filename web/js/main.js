@@ -88,6 +88,23 @@ function init() {
     tabButtons.forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+
+    // Palette selector change event - re-render bitmap with new palette
+    const paletteTypeSelect = document.getElementById('palette-type');
+    if (paletteTypeSelect) {
+        paletteTypeSelect.addEventListener('change', () => {
+            if (selectedAsset && selectedAsset.member && selectedAsset.member.type === MemberType.kBitmapMember) {
+                // Clear existing info except palette selector
+                assetInfo.innerHTML = '';
+                assetCanvas.classList.add('hidden');
+                assetText.classList.add('hidden');
+                assetBinary.classList.add('hidden');
+                // Re-display the bitmap with new palette
+                displayAssetInfo(selectedAsset);
+                displayBitmap(selectedAsset);
+            }
+        });
+    }
 }
 
 function switchTab(tab) {
@@ -422,6 +439,12 @@ function refreshAssetDisplay() {
     assetText.classList.add('hidden');
     assetBinary.classList.add('hidden');
 
+    // Hide palette selector by default (will be shown for bitmap assets)
+    const paletteSelector = document.getElementById('palette-selector');
+    if (paletteSelector) {
+        paletteSelector.classList.add('hidden');
+    }
+
     // Show asset info
     let infoHtml = `
         <p><strong>Name:</strong> ${escapeHtml(selectedAsset.name)}</p>
@@ -494,6 +517,199 @@ function generateMacPalette() {
     return palette;
 }
 
+// Greyscale palette from PhotoRenderer (for Habbo/Shockwave photos)
+// This is the specific 256-entry grayscale palette used by Director for grayscale images
+const GREYSCALE_PALETTE = [
+    [255,255,255],[254,254,254],[255,255,255],[253,253,253],[252,252,252],
+    [251,251,251],[250,250,250],[249,249,249],[248,248,248],[247,247,247],
+    [246,246,246],[245,245,245],[244,244,244],[243,243,243],[255,255,255],
+    [242,242,242],[241,241,241],[240,240,240],[239,239,239],[238,238,238],
+    [237,237,237],[236,236,236],[235,235,235],[234,234,234],[233,233,233],
+    [232,232,232],[255,255,255],[231,231,231],[230,230,230],[229,229,229],
+    [228,228,228],[227,227,227],[223,223,223],[222,222,222],[255,255,255],
+    [221,221,221],[220,220,220],[219,219,219],[218,218,218],[217,217,217],
+    [216,216,216],[215,215,215],[214,214,214],[213,213,213],[212,212,212],
+    [211,211,211],[255,255,255],[210,210,210],[209,209,209],[208,208,208],
+    [207,207,207],[206,206,206],[205,205,205],[204,204,204],[203,203,203],
+    [202,202,202],[201,201,201],[200,200,200],[255,255,255],[199,199,199],
+    [198,198,198],[197,197,197],[196,196,196],[195,195,195],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[255,255,255],[255,255,255],[255,255,255],[255,255,255],
+    [255,255,255],[191,191,191],[190,190,190],[255,255,255],[189,189,189],
+    [188,188,188],[187,187,187],[186,186,186],[185,185,185],[184,184,184],
+    [183,183,183],[182,182,182],[181,181,181],[180,180,180],[179,179,179],
+    [255,255,255],[178,178,178],[177,177,177],[176,176,176],[175,175,175],
+    [174,174,174],[173,173,173],[172,172,172],[171,171,171],[170,170,170],
+    [169,169,169],[168,168,168],[255,255,255],[167,167,167],[166,166,166],
+    [165,165,165],[164,164,164],[163,163,163],[159,159,159],[158,158,158],
+    [255,255,255],[157,157,157],[156,156,156],[155,155,155],[154,154,154],
+    [153,153,153],[152,152,152],[151,151,151],[150,150,150],[149,149,149],
+    [148,148,148],[147,147,147],[255,255,255],[146,146,146],[145,145,145],
+    [144,144,144],[143,143,143],[142,142,142],[141,141,141],[140,140,140],
+    [139,139,139],[138,138,138],[137,137,137],[136,136,136],[255,255,255],
+    [135,135,135],[134,134,134],[133,133,133],[132,132,132],[131,131,131],
+    [127,127,127],[126,126,126],[255,255,255],[125,125,125],[124,124,124],
+    [123,123,123],[122,122,122],[121,121,121],[120,120,120],[119,119,119],
+    [118,118,118],[117,117,117],[116,116,116],[115,115,115],[255,255,255],
+    [114,114,114],[113,113,113],[112,112,112],[111,111,111],[110,110,110],
+    [109,109,109],[108,108,108],[107,107,107],[106,106,106],[105,105,105],
+    [104,104,104],[255,255,255],[103,103,103],[102,102,102],[101,101,101],
+    [100,100,100],[99,99,99],[95,95,95],[94,94,94],[255,255,255],
+    [93,93,93],[92,92,92],[91,91,91],[90,90,90],[89,89,89],
+    [88,88,88],[87,87,87],[86,86,86],[85,85,85],[84,84,84],
+    [83,83,83],[255,255,255],[82,82,82],[81,81,81],[80,80,80],
+    [79,79,79],[78,78,78],[77,77,77],[76,76,76],[75,75,75],
+    [74,74,74],[73,73,73],[72,72,72],[255,255,255],[71,71,71],
+    [70,70,70],[69,69,69],[68,68,68],[67,67,67],[63,63,63],
+    [62,62,62],[255,255,255],[61,61,61],[60,60,60],[59,59,59],
+    [58,58,58],[57,57,57],[56,56,56],[55,55,55],[54,54,54],
+    [53,53,53],[52,52,52],[51,51,51],[255,255,255],[50,50,50],
+    [49,49,49],[48,48,48],[47,47,47],[46,46,46],[45,45,45],
+    [44,44,44],[43,43,43],[42,42,42],[41,41,41],[40,40,40],
+    [255,255,255],[39,39,39],[38,38,38],[37,37,37],[36,36,36],
+    [35,35,35]
+];
+
+// Parse a CLUT chunk into a palette array
+function parseCLUTChunk(clutData) {
+    const bytes = toUint8Array(clutData);
+    const numColors = Math.min(256, Math.floor(bytes.length / 6));
+    const palette = [];
+    for (let i = 0; i < numColors; i++) {
+        const offset = i * 6;
+        // Director palettes store colors as 16-bit values per channel (we use high byte)
+        palette.push([
+            bytes[offset] || 0,      // R (high byte)
+            bytes[offset + 2] || 0,  // G (high byte)
+            bytes[offset + 4] || 0   // B (high byte)
+        ]);
+    }
+    // Pad to 256 if needed
+    while (palette.length < 256) {
+        palette.push([0, 0, 0]);
+    }
+    return palette;
+}
+
+// Find the appropriate palette for a bitmap based on its palette ID
+function findPaletteForBitmap(paletteId, paletteTypeOverride = 'auto') {
+    // If user has selected a specific palette type, use it
+    if (paletteTypeOverride === 'greyscale') {
+        return GREYSCALE_PALETTE;
+    }
+    if (paletteTypeOverride === 'mac') {
+        return MAC_PALETTE;
+    }
+
+    // Auto mode: detect based on palette ID
+    // paletteId of -3 or -2 typically means greyscale in Director
+    if (paletteId === -3 || paletteId === -2) {
+        return GREYSCALE_PALETTE;
+    }
+
+    // paletteId > 0 references a cast member (try to look up CLUT)
+    if (paletteId > 0 && currentDirFile) {
+        try {
+            // Try to find CLUT chunk for this palette member
+            const keyTable = currentDirFile.keyTable;
+            if (keyTable) {
+                for (const entry of keyTable.entries) {
+                    if (entry.castID === paletteId && entry.fourCC === FOURCC('C', 'L', 'U', 'T')) {
+                        const clutData = currentDirFile.getChunkData(FOURCC('C', 'L', 'U', 'T'), entry.sectionID);
+                        if (clutData) {
+                            console.log('Found CLUT palette for ID:', paletteId);
+                            return parseCLUTChunk(clutData);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Error looking up palette:', e);
+        }
+    }
+
+    // Default fallback to Mac palette
+    return MAC_PALETTE;
+}
+
+// Try to parse BITD data using PhotoRenderer format (with header at offset 28)
+// Returns { width, height, bitDepth, totalWidth, paletteId, pixelDataOffset } or null if not in this format
+function tryParsePhotoRendererFormat(bitdBytes) {
+    if (bitdBytes.length < 70) return null; // Need at least header + some pixel data
+
+    const view = new DataView(bitdBytes.buffer, bitdBytes.byteOffset, bitdBytes.byteLength);
+
+    // PhotoRenderer format: header starts at offset 28
+    const HEADER_OFFSET = 28;
+
+    try {
+        // Read bitmap properties at offset 28
+        const totalWidth = view.getUint16(HEADER_OFFSET, false) & 0x7FFF;
+        const top = view.getInt16(HEADER_OFFSET + 2, false);
+        const left = view.getInt16(HEADER_OFFSET + 4, false);
+        const bottom = view.getInt16(HEADER_OFFSET + 6, false);
+        const right = view.getInt16(HEADER_OFFSET + 8, false);
+
+        const width = right - left;
+        const height = bottom - top;
+
+        // Sanity check dimensions
+        if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+            return null;
+        }
+        if (totalWidth <= 0 || totalWidth > 4096) {
+            return null;
+        }
+
+        // After rect (10 bytes), skip 13 bytes, then read bitDepth (1 byte, at offset 28+10+13=51)
+        // Actually per PhotoRenderer: skip 1, skip 7, readShort, readShort, read = 1+7+2+2+1 = 13 bytes
+        const bitDepthOffset = HEADER_OFFSET + 10 + 13; // offset 51
+        if (bitdBytes.length < bitDepthOffset + 1) return null;
+
+        const bitDepth = bitdBytes[bitDepthOffset]; // Little-endian single byte
+
+        // Validate bit depth
+        if (bitDepth !== 1 && bitDepth !== 8 && bitDepth !== 16 && bitDepth !== 24 && bitDepth !== 32) {
+            return null;
+        }
+
+        // Palette is at offset 52 (4 bytes big-endian int, subtract 1)
+        const paletteOffset = bitDepthOffset + 1;
+        if (bitdBytes.length < paletteOffset + 4) return null;
+        const paletteId = view.getInt32(paletteOffset, false) - 1;
+
+        // Skip 8 more bytes (4 + skip 4), then length at offset 64 (4 bytes little-endian)
+        const lengthOffset = paletteOffset + 4 + 8; // offset 64
+        if (bitdBytes.length < lengthOffset + 4) return null;
+
+        // Read length as little-endian
+        const length = view.getUint32(lengthOffset, true);
+
+        // Pixel data starts at offset 68
+        const pixelDataOffset = lengthOffset + 4; // offset 68
+
+        console.log('PhotoRenderer format detected:', {
+            totalWidth, width, height, bitDepth, paletteId, length, pixelDataOffset
+        });
+
+        return {
+            width,
+            height,
+            bitDepth,
+            totalWidth,
+            paletteId,
+            pixelDataOffset
+        };
+    } catch (e) {
+        console.log('Not PhotoRenderer format:', e.message);
+        return null;
+    }
+}
+
 function displayBitmap(asset) {
     const member = asset.member;
 
@@ -501,7 +717,56 @@ function displayBitmap(asset) {
     console.log('  dataChunkId:', asset.dataChunkId);
     console.log('  member.specificData length:', member.specificData?.length);
 
-    // Parse bitmap-specific data
+    // Show the palette selector for bitmap assets
+    const paletteSelector = document.getElementById('palette-selector');
+    const paletteTypeSelect = document.getElementById('palette-type');
+    if (paletteSelector) {
+        paletteSelector.classList.remove('hidden');
+    }
+
+    // Try to get the BITD chunk data first
+    let bitdData = null;
+    if (asset.dataChunkId && currentDirFile.chunkExists(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId)) {
+        try {
+            bitdData = currentDirFile.getChunkData(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId);
+            console.log('  BITD data size:', bitdData?.length || bitdData?.byteLength);
+        } catch (e) {
+            console.error('Error loading BITD chunk:', e);
+        }
+    }
+
+    // Try PhotoRenderer format first (BITD contains header + pixel data)
+    if (bitdData) {
+        const bitdBytes = toUint8Array(bitdData);
+        const photoFormat = tryParsePhotoRendererFormat(bitdBytes);
+
+        if (photoFormat) {
+            // Use PhotoRenderer format
+            const { width, height, bitDepth, totalWidth, paletteId, pixelDataOffset } = photoFormat;
+
+            // Get the selected palette type from UI
+            const paletteTypeOverride = paletteTypeSelect ? paletteTypeSelect.value : 'auto';
+            const palette = findPaletteForBitmap(paletteId, paletteTypeOverride);
+            const paletteName = paletteTypeOverride !== 'auto' ? paletteTypeOverride :
+                              (paletteId === -3 || paletteId === -2 ? 'greyscale (auto)' :
+                               paletteId > 0 ? `custom #${paletteId}` : 'mac (default)');
+
+            assetInfo.innerHTML += `
+                <p><strong>Format:</strong> PhotoRenderer/Habbo</p>
+                <p><strong>Dimensions:</strong> ${width} x ${height}</p>
+                <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
+                <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
+                <p><strong>Palette:</strong> ${paletteName} (ID: ${paletteId})</p>
+            `;
+
+            // Extract pixel data starting at pixelDataOffset
+            const pixelData = bitdBytes.slice(pixelDataOffset);
+            renderBitmapToCanvas(pixelData, width, height, bitDepth, totalWidth, palette, true); // Use PhotoRenderer RLE
+            return;
+        }
+    }
+
+    // Fall back to standard Director format (dimensions from specificData, BITD is just pixel data)
     if (!member.specificData || member.specificData.length < 14) {
         assetBinary.innerHTML = '<p>No bitmap data available</p>';
         assetBinary.classList.remove('hidden');
@@ -519,10 +784,9 @@ function displayBitmap(asset) {
         // Offset 2-9: initialRect (top, left, bottom, right)
         // Offset 10-17: boundingRect
         // Offset 18-21: regPoint (y, x)
-        // Offset 22: flags
-        // Offset 23: bitDepth (or at different offset for D5+)
+        // Offset 22: flags or bitDepth
 
-        let totalWidth = view.getUint16(0, false);  // Row stride
+        let totalWidth = view.getUint16(0, false) & 0x7FFF;  // Row stride (mask high bit)
         const top = view.getInt16(2, false);
         const left = view.getInt16(4, false);
         const bottom = view.getInt16(6, false);
@@ -531,9 +795,15 @@ function displayBitmap(asset) {
         const height = bottom - top;
 
         let bitDepth = 8; // Default
+        let paletteId = 0;
+
+        // The high bit of totalWidth indicates if we have extended data
+        const hasExtendedData = (view.getUint16(0, false) & 0x8000) !== 0;
+
         if (bytes.length >= 24) {
-            // Try to get bit depth - location varies
-            const possibleBitDepth = view.getUint8(23);
+            // Try to get bit depth - location varies by version
+            // For D4+, it's often at offset 22 as a byte
+            const possibleBitDepth = view.getUint8(22);
             if (possibleBitDepth === 1 || possibleBitDepth === 2 || possibleBitDepth === 4 ||
                 possibleBitDepth === 8 || possibleBitDepth === 16 || possibleBitDepth === 24 || possibleBitDepth === 32) {
                 bitDepth = possibleBitDepth;
@@ -548,36 +818,40 @@ function displayBitmap(asset) {
             }
         }
 
+        // Try to parse palette ID from specificData
+        if (bytes.length >= 26) {
+            // Palette reference location varies by version
+            paletteId = view.getInt16(24, false);
+            console.log('  Parsed paletteId from specificData:', paletteId);
+        }
+
         // Calculate expected row width if not provided
         if (totalWidth === 0) {
             totalWidth = Math.ceil((width * bitDepth) / 8);
-            // Align to 2 bytes
+            // Align to 2 bytes (word alignment)
             if (totalWidth % 2 !== 0) totalWidth++;
         }
 
+        // Get the selected palette type from UI
+        const paletteTypeOverride = paletteTypeSelect ? paletteTypeSelect.value : 'auto';
+
+        // Get the appropriate palette
+        const palette = findPaletteForBitmap(paletteId, paletteTypeOverride);
+        const paletteName = paletteTypeOverride !== 'auto' ? paletteTypeOverride :
+                          (paletteId === -3 || paletteId === -2 ? 'greyscale (auto)' :
+                           paletteId > 0 ? `custom #${paletteId}` : 'mac (default)');
+
         // Update info with dimensions
         assetInfo.innerHTML += `
+            <p><strong>Format:</strong> Standard Director</p>
             <p><strong>Dimensions:</strong> ${width} x ${height}</p>
             <p><strong>Bit Depth:</strong> ${bitDepth}-bit</p>
             <p><strong>Row Stride:</strong> ${totalWidth} bytes</p>
+            <p><strong>Palette:</strong> ${paletteName}</p>
         `;
 
-        // Try to get and display the actual bitmap data (BITD chunk)
-        console.log('  Checking for BITD chunk:', asset.dataChunkId);
-        if (asset.dataChunkId) {
-            const exists = currentDirFile.chunkExists(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId);
-            console.log('  chunkExists result:', exists);
-        }
-        if (asset.dataChunkId && currentDirFile.chunkExists(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId)) {
-            try {
-                console.log('  Loading BITD data...');
-                const bitdData = currentDirFile.getChunkData(FOURCC('B', 'I', 'T', 'D'), asset.dataChunkId);
-                console.log('  BITD data size:', bitdData?.length || bitdData?.byteLength);
-                renderBitmapToCanvas(bitdData, width, height, bitDepth, totalWidth);
-            } catch (e) {
-                console.error('Error loading BITD chunk:', e);
-                displayBinaryData(asset);
-            }
+        if (bitdData) {
+            renderBitmapToCanvas(bitdData, width, height, bitDepth, totalWidth, palette, false); // Use standard PackBits
         } else {
             console.log('  No BITD chunk found, showing binary data');
             assetInfo.innerHTML += `<p><strong>Note:</strong> Bitmap data chunk not found</p>`;
@@ -589,7 +863,40 @@ function displayBitmap(asset) {
     }
 }
 
-// Decompress PackBits/RLE encoded data (used in Director BITD chunks)
+// Decompress RLE encoded data (used in Director BITD chunks)
+// This matches PhotoRenderer's algorithm: marker >= 128 means repeat, < 128 means literal
+function decompressRLE(compressed, expectedSize) {
+    const output = new Uint8Array(expectedSize);
+    let srcPos = 0;
+    let dstPos = 0;
+
+    while (srcPos < compressed.length && dstPos < expectedSize) {
+        const marker = compressed[srcPos++];
+
+        if (marker >= 128) {
+            // Repeat next byte (257 - marker) times
+            // For marker=128: repeat 129 times
+            // For marker=255: repeat 2 times
+            const count = 257 - marker;
+            const value = srcPos < compressed.length ? compressed[srcPos++] : 0;
+            for (let i = 0; i < count && dstPos < expectedSize; i++) {
+                output[dstPos++] = value;
+            }
+        } else {
+            // Copy (marker + 1) bytes literally
+            // For marker=0: copy 1 byte
+            // For marker=127: copy 128 bytes
+            const count = marker + 1;
+            for (let i = 0; i < count && dstPos < expectedSize && srcPos < compressed.length; i++) {
+                output[dstPos++] = compressed[srcPos++];
+            }
+        }
+    }
+
+    return output;
+}
+
+// Standard PackBits decompression (128 is no-op) - for standard Director files
 function decompressPackBits(compressed, expectedSize) {
     const output = new Uint8Array(expectedSize);
     let srcPos = 0;
@@ -607,19 +914,22 @@ function decompressPackBits(compressed, expectedSize) {
         } else if (n > 128) {
             // Repeat next byte (257-n) times
             const count = 257 - n;
-            const value = compressed[srcPos++] || 0;
+            const value = srcPos < compressed.length ? compressed[srcPos++] : 0;
             for (let i = 0; i < count && dstPos < expectedSize; i++) {
                 output[dstPos++] = value;
             }
         }
-        // n === 128 is a no-op
+        // n === 128 is a no-op in standard PackBits
     }
 
     return output;
 }
 
-function renderBitmapToCanvas(data, width, height, bitDepth, rowStride) {
-    console.log('renderBitmapToCanvas:', { width, height, bitDepth, rowStride, dataSize: data?.length || data?.byteLength });
+function renderBitmapToCanvas(data, width, height, bitDepth, rowStride, palette = null, usePhotoRendererRLE = false) {
+    console.log('renderBitmapToCanvas:', { width, height, bitDepth, rowStride, dataSize: data?.length || data?.byteLength, usePhotoRendererRLE });
+
+    // Use provided palette or fall back to MAC_PALETTE
+    palette = palette || MAC_PALETTE;
 
     if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
         console.log('  Invalid dimensions, showing error');
@@ -641,23 +951,33 @@ function renderBitmapToCanvas(data, width, height, bitDepth, rowStride) {
     // Calculate expected decompressed size
     const expectedSize = rowStride * height;
 
-    // Try to decompress if data looks compressed (smaller than expected raw size)
+    // Try to decompress
     let bytes;
-    if (compressed.length < expectedSize * 0.9) {
-        // Data is likely compressed - try PackBits decompression
+    if (compressed.length < expectedSize) {
+        // Data is compressed - decompress it
         try {
-            bytes = decompressPackBits(compressed, expectedSize);
-            assetInfo.innerHTML += `<p><strong>Compression:</strong> PackBits (${compressed.length} -> ${bytes.length} bytes)</p>`;
+            if (usePhotoRendererRLE) {
+                // Use PhotoRenderer's RLE algorithm (marker >= 128 means repeat)
+                bytes = decompressRLE(compressed, expectedSize);
+                assetInfo.innerHTML += `<p><strong>Compression:</strong> RLE (${compressed.length} -> ${bytes.length} bytes)</p>`;
+            } else {
+                // Use standard PackBits (128 is no-op)
+                bytes = decompressPackBits(compressed, expectedSize);
+                assetInfo.innerHTML += `<p><strong>Compression:</strong> PackBits (${compressed.length} -> ${bytes.length} bytes)</p>`;
+            }
         } catch (e) {
+            console.error('Decompression error:', e);
             // Fall back to raw data
             bytes = compressed;
         }
     } else {
         bytes = compressed;
+        if (compressed.length > expectedSize) {
+            console.log('  Data larger than expected, using first', expectedSize, 'bytes');
+        }
     }
 
     try {
-        const palette = MAC_PALETTE;
 
         if (bitDepth === 1) {
             // 1-bit bitmap (black and white)

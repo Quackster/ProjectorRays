@@ -374,6 +374,36 @@ button {
     background-color: #1a4a7a;
 }
 
+#palette-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#palette-selector label {
+    font-size: 0.85rem;
+    color: #888;
+}
+
+#palette-type {
+    padding: 0.25rem 0.5rem;
+    background-color: #0f3460;
+    color: white;
+    border: 1px solid #1a4a7a;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+#palette-type:hover {
+    background-color: #1a4a7a;
+}
+
+#palette-type:focus {
+    outline: none;
+    border-color: #e94560;
+}
+
 #asset-preview {
     flex: 1;
     overflow: auto;
